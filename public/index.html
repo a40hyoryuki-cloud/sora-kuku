@@ -115,6 +115,22 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
 #tapstart .big{height:84px;font-size:32px;padding:0 40px;background:var(--orange);color:#fff}
 #tapstart .chars{font-size:clamp(46px,12vw,72px);letter-spacing:8px}
 @media (orientation:landscape){.dangrid{max-width:min(720px,calc((100vh - 340px) * 1.1));max-width:min(720px,calc((100dvh - 340px) * 1.1))}#home .title h1{font-size:clamp(30px,6vh,52px)}}
+/* くくのうた */
+.songbar{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;padding:4px 0 10px}
+.songbar .big{height:56px}
+#songGo.stop{background:var(--red);color:#fff}
+#songGo{background:var(--orange);color:#fff}
+.songgrid{flex:1;min-height:0;overflow:auto;display:grid;grid-auto-rows:max-content;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;align-content:start;padding:2px 2px 16px;max-width:1100px;width:100%;margin:0 auto;-webkit-overflow-scrolling:touch}
+.scard{background:#fff;border-radius:22px;box-shadow:var(--shadow);scroll-margin:8px}
+.scard h4{margin:0;padding:8px 10px 8px 12px;border-radius:22px 22px 0 0;white-space:nowrap;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:space-between;cursor:pointer}
+.scard h4 small{font-size:14px;background:#fff3;border-radius:12px;padding:3px 10px}
+.scard ol{list-style:none;margin:0;padding:6px 8px 8px}
+.scard li{scroll-margin:60px;display:flex;flex-direction:column;padding:3px 8px;border-radius:12px;transition:background .15s,transform .15s}
+.scard li .eqs{font-size:21px;line-height:1.2}
+.scard li .yo{font-size:11px;color:var(--sub);font-weight:500;line-height:1.2}
+.scard li.now{background:var(--yellow);transform:scale(1.05)}
+.scard li.done .eqs{color:#b6a58c}
+.scard.cur{box-shadow:0 0 0 5px var(--yellow),var(--shadow)}
 </style>
 </head>
 <body>
@@ -135,6 +151,7 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
     <div class="title"><h1 id="logo">そらの くくランド</h1><p>どの だんで あそぶ？</p></div>
     <div class="dangrid" id="dangrid"></div>
     <div class="homebar">
+      <button class="big" id="toSong">🎶 くくのうた</button>
       <button class="big" id="toZukan">📖 なかま</button>
     </div>
   </section>
@@ -208,6 +225,23 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
     <div class="ctrl"><button class="big" id="pickReplay">🔊 もういちど きく</button></div>
   </section>
 
+  <!-- くくのうた（1〜9のだん ぜんぶ） -->
+  <section class="screen" id="song">
+    <div class="top">
+      <button class="back" data-go="home">←</button>
+      <h2>🎶 くくのうた</h2>
+      <div class="starbox stars">⭐ 0</div>
+    </div>
+    <div class="songbar">
+      <button class="big" id="songGo">▶ はじめから</button>
+      <div class="seg" id="songSpeed">
+        <button data-sp="0">🐢 ゆっくり</button><button data-sp="1">🐰 ふつう</button><button data-sp="2">🚀 はやい</button>
+      </div>
+      <button class="big" id="songFushi">🎼 ふし: オフ</button>
+    </div>
+    <div class="songgrid" id="songGrid"></div>
+  </section>
+
   <!-- なかま図鑑 -->
   <section class="screen" id="zukanScr">
     <div class="top">
@@ -258,7 +292,7 @@ const FRIENDS = [
 
 /* ============ 保存 ============ */
 const KEY = "sora-kuku-v1";
-let S = { stars:0, friends:0, unlocked:[2,5], stamps:{}, speed:1, order:0, bgm:true };
+let S = { stars:0, friends:0, unlocked:[2,5], stamps:{}, speed:1, order:0, bgm:true, fushi:false };
 try { const raw = localStorage.getItem(KEY); if (raw) S = Object.assign(S, JSON.parse(raw)); } catch(e) {}
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} }
 const stamp = (d,m) => (S.stamps[d] ||= {}, S.stamps[d][m]);
@@ -301,7 +335,7 @@ function play(file, text, v = voice(), rate = 1){
     setTimeout(fin, 8000);
   });
 }
-function stopAll(){ RUN++; try { AU.pause(); } catch(e) {} try { speechSynthesis.cancel(); } catch(e) {} speakId++; duck(false); }
+function stopAll(){ RUN++; try { songStop(); } catch(e) {} try { AU.pause(); } catch(e) {} try { speechSynthesis.cancel(); } catch(e) {} speakId++; duck(false); }
 const playPh = (id, v) => play("ph_"+id, PH[id], v);
 const playFull = (d,b,v,r) => play(`full_${d}x${b}`, KUKU[d][b-1].join(" "), v, r);
 const playCall = (d,b,v) => play(`call_${d}x${b}`, KUKU[d][b-1][0], v);
@@ -330,6 +364,7 @@ function sfx(kind){
 // 曲は ファイルを使わず、起動時に WebAudio で 8小節を作ってループする
 const BGM_VOL = 0.22;          // ふだんの音量
 const DUCK = 0.1;              // 声の間は -20dB（= 0.1倍）
+let bgmT0 = 0;
 let bgmGain = null, bgmSrc = null, speaking = false, speakId = 0, duckT = null;
 function midi(n){ return 440 * Math.pow(2, (n - 69) / 12); }
 async function buildBGM(){
@@ -386,7 +421,7 @@ async function startBGM(){
     if (!bgmSrc) {
       const buf = await buildBGM();
       bgmSrc = actx.createBufferSource(); bgmSrc.buffer = buf; bgmSrc.loop = true;
-      bgmSrc.connect(bgmGain); bgmSrc.start();
+      bgmSrc.connect(bgmGain); bgmT0 = actx.currentTime + .05; bgmSrc.start(bgmT0);
     }
     applyBGM(.6);
   } catch(e) {}
@@ -423,6 +458,7 @@ function go(id){
   if (id === "listen") startListen();
   if (id === "say") startSay();
   if (id === "pick") startPick();
+  if (id === "song") renderSong();
 }
 $$("[data-go]").forEach(b => b.onclick = () => go(b.dataset.go));
 function refreshStars(){ $$(".starbox").forEach(e => e.textContent = "⭐ " + S.stars); }
@@ -453,6 +489,7 @@ function renderMenu(){
 }
 $$(".mode").forEach(b => b.onclick = () => go(b.dataset.mode));
 $("#toZukan").onclick = () => go("zukanScr");
+$("#toSong").onclick = () => go("song");
 $("#bgmBtn").onclick = () => { S.bgm = !S.bgm; save(); renderBgmBtn(); applyBGM(.1); };
 
 // ほし・スタンプ・なかま
@@ -651,6 +688,114 @@ async function startPick(){
   await celebrate(S.friends > f0 ? FRIENDS[S.friends-1] : null, fin);
 }
 
+/* ---- くくのうた：1〜9のだんを ビートに合わせて 読みあげる ---- */
+const BEAT = 60 / 112;                 // BGM と同じテンポ
+const SONG_ORDER = [1,2,3,4,5,6,7,8,9];
+// ふし：段の中で 音の高さを少しずつ 上げ下げ（半音×100）
+const FUSHI = [0, 200, 400, 200, 0, 200, 400, 500, 700];
+const BUF = new Map();
+let songJobs = [];                     // 予約した音とタイマー（止めるとき用）
+let songOn = false;
+function songStop(){
+  songJobs.forEach(j => { try { j.stop ? j.stop() : clearTimeout(j); } catch(e) {} });
+  songJobs = []; songOn = false;
+  const b = $("#songGo"); if (b) { b.textContent = "▶ はじめから"; b.classList.remove("stop"); }
+  $$("#songGrid li.now").forEach(e => e.classList.remove("now"));
+  $$("#songGrid .scard.cur").forEach(e => e.classList.remove("cur"));
+}
+function loadBuf(file){
+  if (BUF.has(file)) return BUF.get(file);
+  const p = fetch(`audio/${file}.mp3`).then(r => { if (!r.ok) throw 0; return r.arrayBuffer(); })
+    .then(ab => new Promise((ok, ng) => actx.decodeAudioData(ab, ok, ng)));
+  BUF.set(file, p); p.catch(() => BUF.delete(file));
+  return p;
+}
+function renderSong(){
+  $$("#songSpeed button").forEach(x => x.classList.toggle("on", +x.dataset.sp === S.speed));
+  $("#songFushi").textContent = S.fushi ? "🎼 ふし: オン" : "🎼 ふし: オフ";
+  const g = $("#songGrid");
+  g.innerHTML = SONG_ORDER.map(d => `
+    <div class="scard" data-dan="${d}">
+      <h4 style="background:${DAN_COLOR[d]}">${d}のだん <small>▶</small></h4>
+      <ol>${KUKU[d].map(([c,a],i) => `<li data-b="${i+1}"><span class="eqs">${d} × ${i+1} = ${d*(i+1)}</span><span class="yo">${c} ${a}</span></li>`).join("")}</ol>
+    </div>`).join("");
+  $$("#songGrid h4").forEach(h => h.onclick = () => startSong(+h.parentNode.dataset.dan));
+}
+$("#songGo").onclick = () => songOn ? (stopAll(), go("song")) : startSong(1);
+$$("#songSpeed button").forEach(b => b.onclick = () => {
+  S.speed = +b.dataset.sp; save();
+  $$("#songSpeed button").forEach(x => x.classList.toggle("on", x === b));
+});
+$("#songFushi").onclick = () => { S.fushi = !S.fushi; save(); $("#songFushi").textContent = S.fushi ? "🎼 ふし: オン" : "🎼 ふし: オフ"; };
+
+async function startSong(fromDan){
+  stopAll(); const id = RUN;
+  songOn = true;
+  const btn = $("#songGo"); btn.textContent = "■ とめる"; btn.classList.add("stop");
+  try { actx ||= new (window.AudioContext || window.webkitAudioContext)(); await actx.resume(); } catch(e) {}
+  const did = duck(true);
+  const out = actx.createGain(); out.gain.value = 1; out.connect(actx.destination);
+  // 次の小節の頭（BGM が無いときは 今から）
+  const nextGrid = (t, beats) => {
+    if (!bgmSrc) return t;
+    const unit = BEAT * beats;
+    return bgmT0 + Math.ceil((t - bgmT0) / unit) * unit;
+  };
+  const at = (t, fn) => { const h = setTimeout(fn, Math.max(0, (t - actx.currentTime) * 1000)); songJobs.push(h); };
+  const startI = SONG_ORDER.indexOf(fromDan);
+  let useBuf = true;
+  for (const d of SONG_ORDER.slice(startI)) {
+    if (!alive(id)) return;
+    const v = voice();
+    const files = [`ph_dan${d}_${v}`, ...KUKU[d].map((_, i) => `full_${d}x${i+1}_${v}`)];
+    let bufs = null;
+    if (useBuf) { try { bufs = await Promise.all(files.map(loadBuf)); } catch(e) { useBuf = false; } }
+    if (!alive(id)) return;
+    const card = $(`#songGrid .scard[data-dan="${d}"]`);
+    $$("#songGrid .scard.cur").forEach(e => e.classList.remove("cur"));
+    card.classList.add("cur");
+    card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+    if (!bufs) {
+      // 予備：音声が読めないときは ふつうの読みあげで 順番に
+      await playPh("dan" + d, v); if (!alive(id)) return;
+      for (let b = 1; b <= 9; b++) {
+        const li = $(`li[data-b="${b}"]`, card); li.classList.add("now");
+        await playFull(d, b, v); if (!alive(id)) return;
+        li.classList.remove("now"); li.classList.add("done"); await sleep(250);
+      }
+    } else {
+      // 1行あたりの拍数を 段の中で そろえる（ゆっくり6拍・ふつう4拍・はやい3拍）
+      const rate = 1;
+      const base = [6, 4, 3][S.speed] ?? 4;
+      const longest = Math.max(...bufs.slice(1).map((x, i) => x.duration / Math.pow(2, (S.fushi ? FUSHI[i] : 0) / 1200)));
+      const lineBeats = Math.max(base, Math.ceil((longest + .15) / BEAT));
+      const slot = (dur, isHead) => isHead ? Math.max(4, Math.ceil(dur / BEAT / 4) * 4) : lineBeats;   // 「◯のだん」は1小節
+      let t = nextGrid(actx.currentTime + .25, 4);      // 小節の頭から
+      const items = [{ buf: bufs[0], li: null, det: 0 }].concat(bufs.slice(1).map((buf, i) => ({
+        buf, li: $(`li[data-b="${i+1}"]`, card), det: S.fushi ? FUSHI[i] : 0 })));
+      for (const [k, it] of items.entries()) {
+        const src = actx.createBufferSource(); src.buffer = it.buf;
+        src.playbackRate.value = rate; src.detune.value = it.det;
+        src.connect(out); src.start(t); songJobs.push(src);
+        const li = it.li;
+        if (li) at(t, () => { $$("#songGrid li.now").forEach(e => { e.classList.remove("now"); e.classList.add("done"); }); li.classList.add("now"); li.scrollIntoView({ behavior: "smooth", block: "nearest" }); });
+        t += slot(it.buf.duration, k === 0) * BEAT;
+      }
+      t = nextGrid(t, 4);                               // つぎの段は 小節の頭から
+      // この段が おわるまで まつ
+      while (actx.currentTime < t - .3) { if (!alive(id)) return; await sleep(100); }
+      $$("li.now", card).forEach(e => { e.classList.remove("now"); e.classList.add("done"); });
+    }
+    addStars(1);
+  }
+  duck(false, did);
+  if (!alive(id)) return;
+  songOn = false; btn.textContent = "▶ はじめから"; btn.classList.remove("stop");
+  $$("#songGrid .scard.cur").forEach(e => e.classList.remove("cur"));
+  await playPh("clear");
+}
+
 /* ---- なかま ---- */
 function renderZukan(){
   const rest = STAR_PER - (S.stars % STAR_PER);
@@ -677,6 +822,7 @@ function renderZukan(){
 
 /* ---- はじめる（iPhoneは タッチしてから でないと 音が出ない） ---- */
 $("#startBtn").onclick = () => {
+  try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch(e) {}
   try { actx ||= new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch(e) {}
   AU.src = "data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQxAADB8AhSmxhIIEVCSiJrDCQBTcu3UrAIwUdkRgQbFAZC1CQEwTJ9mjRvBA4UOLD8nKVOWfh+UlK3z/177OXrfOdKl7pyn3Xf//WreyTRUoAWgBgkOAGbZHBgG1OF6zM82DWbZaUmMBptgQhGjsyYqc9ae9XFz280948NMBWInljyzsNRFLPWdnZGWrddDsjK1unuSrVN9jJsK8KuQtQCtMBjCEtImISdNKJOopIpBFpNSMbIHCSRpRR5iakjTiyzLhchUUBwCgyKiweBv/7UsQbg8isVNoMPMjAAAA0gAAABEVFGmgqK////9bP/6XCykxBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
   AU.play().catch(()=>{});
