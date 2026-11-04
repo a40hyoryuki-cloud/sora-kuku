@@ -1,6 +1,6 @@
 {
-  "name": "そらのくくランド",
-  "short_name": "くくランド",
+  "name": "そら九九",
+  "short_name": "そら九九",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#fff6dc",
