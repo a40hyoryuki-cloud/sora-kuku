@@ -128,7 +128,7 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
   <!-- ホーム -->
   <section class="screen on" id="home">
     <div class="top">
-      <div style="width:56px"></div>
+      <button class="back" id="bgmBtn" aria-label="BGM">🎵</button>
       <div style="flex:1"></div>
       <div class="starbox" id="homeStars">⭐ 0</div>
     </div>
@@ -258,7 +258,7 @@ const FRIENDS = [
 
 /* ============ 保存 ============ */
 const KEY = "sora-kuku-v1";
-let S = { stars:0, friends:0, unlocked:[2,5], stamps:{}, speed:1, order:0 };
+let S = { stars:0, friends:0, unlocked:[2,5], stamps:{}, speed:1, order:0, bgm:true };
 try { const raw = localStorage.getItem(KEY); if (raw) S = Object.assign(S, JSON.parse(raw)); } catch(e) {}
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} }
 const stamp = (d,m) => (S.stamps[d] ||= {}, S.stamps[d][m]);
@@ -274,7 +274,9 @@ let RUN = 0;                // 画面を出たら古い再生を止める合図
 const alive = id => id === RUN;
 
 function speakTTS(text, v, rate){
-  return new Promise(res => {
+  const did = duck(true);
+  return new Promise(res0 => {
+    const res = () => { duck(false, did); res0(); };
     if (!("speechSynthesis" in window)) return setTimeout(res, 600);
     const u = new SpeechSynthesisUtterance(text); u.lang = "ja-JP";
     u.rate = 1.1 * (rate||1); u.pitch = v === "C" ? .8 : 1.2;
@@ -286,7 +288,9 @@ function speakTTS(text, v, rate){
 // file: 例 "full_3x8"、text: 読み（予備用）
 function play(file, text, v = voice(), rate = 1){
   if (!audioOK) return speakTTS(text, v, rate);
-  return new Promise(res => {
+  const did = duck(true);
+  return new Promise(res0 => {
+    const res = () => { duck(false, did); res0(); };
     let done = false; const fin = () => { if (!done) { done = true; AU.onended = AU.onerror = null; res(); } };
     let fell = false; const fallback = () => { if (fell || done) return; fell = true; audioOK = false; speakTTS(text, v, rate).then(fin); };
     AU.onended = fin;
@@ -297,7 +301,7 @@ function play(file, text, v = voice(), rate = 1){
     setTimeout(fin, 8000);
   });
 }
-function stopAll(){ RUN++; try { AU.pause(); } catch(e) {} try { speechSynthesis.cancel(); } catch(e) {} }
+function stopAll(){ RUN++; try { AU.pause(); } catch(e) {} try { speechSynthesis.cancel(); } catch(e) {} speakId++; duck(false); }
 const playPh = (id, v) => play("ph_"+id, PH[id], v);
 const playFull = (d,b,v,r) => play(`full_${d}x${b}`, KUKU[d][b-1].join(" "), v, r);
 const playCall = (d,b,v) => play(`call_${d}x${b}`, KUKU[d][b-1][0], v);
@@ -321,6 +325,89 @@ function sfx(kind){
     if (kind === "tick") { tone(1200,0,.04,"square",.04); }
   } catch(e) {}
 }
+
+/* ============ BGM ============ */
+// 曲は ファイルを使わず、起動時に WebAudio で 8小節を作ってループする
+const BGM_VOL = 0.22;          // ふだんの音量
+const DUCK = 0.1;              // 声の間は -20dB（= 0.1倍）
+let bgmGain = null, bgmSrc = null, speaking = false, speakId = 0, duckT = null;
+function midi(n){ return 440 * Math.pow(2, (n - 69) / 12); }
+async function buildBGM(){
+  const bpm = 112, e = 60 / bpm / 2, bars = 8, sr = 44100;
+  const len = bars * 8 * e;
+  const oc = new OfflineAudioContext(1, Math.ceil(len * sr), sr);
+  const out = oc.createGain(); out.gain.value = .9; out.connect(oc.destination);
+  const note = (f, t, d, type, g, a=.005) => {
+    const o = oc.createOscillator(), v = oc.createGain();
+    o.type = type; o.frequency.value = f;
+    v.gain.setValueAtTime(0, t); v.gain.linearRampToValueAtTime(g, t + a);
+    v.gain.exponentialRampToValueAtTime(.0005, t + d);
+    o.connect(v).connect(out); o.start(t); o.stop(t + d + .02);
+  };
+  const marimba = (n, t) => { note(midi(n), t, .45, "sine", .32); note(midi(n) * 4, t, .08, "sine", .06); };
+  // ハイハット用ノイズ
+  const nb = oc.createBuffer(1, sr * .05, sr), nd = nb.getChannelData(0);
+  for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+  const hat = t => {
+    const s = oc.createBufferSource(), hp = oc.createBiquadFilter(), v = oc.createGain();
+    s.buffer = nb; hp.type = "highpass"; hp.frequency.value = 7000;
+    v.gain.setValueAtTime(.05, t); v.gain.exponentialRampToValueAtTime(.001, t + .04);
+    s.connect(hp).connect(v).connect(out); s.start(t);
+  };
+  const kick = t => {
+    const o = oc.createOscillator(), v = oc.createGain();
+    o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(50, t + .12);
+    v.gain.setValueAtTime(.35, t); v.gain.exponentialRampToValueAtTime(.001, t + .18);
+    o.connect(v).connect(out); o.start(t); o.stop(t + .2);
+  };
+  // コード C - Am - F - G を2回
+  const chords = [[60,64,67],[57,60,64],[53,57,60],[55,59,62]];
+  const bass = [48,45,41,43];
+  // メロディ（8分音符ごと、null は休み）
+  const mel = [
+    [76,79,81,79,76,null,74,72], [72,76,81,79,76,null,null,null],
+    [81,81,79,76,74,76,79,null], [79,null,76,74,72,74,null,null],
+    [76,79,81,79,76,null,74,72], [72,76,81,84,81,null,79,null],
+    [81,79,76,79,74,76,72,null], [74,null,76,74,72,null,null,null],
+  ];
+  for (let b = 0; b < bars; b++) {
+    const t0 = b * 8 * e, ch = chords[b % 4];
+    ch.forEach(n => note(midi(n), t0 + .01, 8 * e, "triangle", .045, .08));      // やわらかい和音
+    [0, 4].forEach(k => note(midi(bass[b % 4]), t0 + k * e + .005, 2.2 * e, "triangle", .3)); // ベース
+    [0, 4].forEach(k => kick(t0 + k * e + .001));
+    for (let k = 0; k < 8; k++) { if (k % 2) hat(t0 + k * e); const m = mel[b][k]; if (m) marimba(m, t0 + k * e + .003); }
+  }
+  return oc.startRendering();
+}
+async function startBGM(){
+  try {
+    actx ||= new (window.AudioContext || window.webkitAudioContext)();
+    if (!bgmGain) { bgmGain = actx.createGain(); bgmGain.gain.value = 0; bgmGain.connect(actx.destination); }
+    if (!bgmSrc) {
+      const buf = await buildBGM();
+      bgmSrc = actx.createBufferSource(); bgmSrc.buffer = buf; bgmSrc.loop = true;
+      bgmSrc.connect(bgmGain); bgmSrc.start();
+    }
+    applyBGM(.6);
+  } catch(e) {}
+}
+function bgmTarget(){ return !S.bgm ? 0 : speaking ? BGM_VOL * DUCK : BGM_VOL; }
+function applyBGM(tc){
+  if (!bgmGain || !actx) return;
+  bgmGain.gain.cancelScheduledValues(actx.currentTime);
+  bgmGain.gain.setTargetAtTime(bgmTarget(), actx.currentTime, tc);
+}
+// 声が始まったらすぐ下げ、終わって少し間があいたら戻す（続けて読むときに上下しないように）
+function duck(on, id){
+  if (on) { speaking = true; clearTimeout(duckT); applyBGM(.04); return ++speakId; }
+  if (id !== undefined && id !== speakId) return;   // 古い（止めた）声の終わりは無視
+  speaking = false; clearTimeout(duckT); duckT = setTimeout(() => applyBGM(.35), 700);
+}
+function renderBgmBtn(){ $("#bgmBtn").textContent = S.bgm ? "🎵" : "🔇"; }
+document.addEventListener("visibilitychange", () => {
+  if (!actx) return;
+  if (document.hidden) actx.suspend(); else actx.resume();
+});
 
 /* ============ 画面 ============ */
 const $ = (s, el=document) => el.querySelector(s);
@@ -366,6 +453,7 @@ function renderMenu(){
 }
 $$(".mode").forEach(b => b.onclick = () => go(b.dataset.mode));
 $("#toZukan").onclick = () => go("zukanScr");
+$("#bgmBtn").onclick = () => { S.bgm = !S.bgm; save(); renderBgmBtn(); applyBGM(.1); };
 
 // ほし・スタンプ・なかま
 function addStars(n){
@@ -593,10 +681,11 @@ $("#startBtn").onclick = () => {
   AU.src = "data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQxAADB8AhSmxhIIEVCSiJrDCQBTcu3UrAIwUdkRgQbFAZC1CQEwTJ9mjRvBA4UOLD8nKVOWfh+UlK3z/177OXrfOdKl7pyn3Xf//WreyTRUoAWgBgkOAGbZHBgG1OF6zM82DWbZaUmMBptgQhGjsyYqc9ae9XFz280948NMBWInljyzsNRFLPWdnZGWrddDsjK1unuSrVN9jJsK8KuQtQCtMBjCEtImISdNKJOopIpBFpNSMbIHCSRpRR5iakjTiyzLhchUUBwCgyKiweBv/7UsQbg8isVNoMPMjAAAA0gAAABEVFGmgqK////9bP/6XCykxBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
   AU.play().catch(()=>{});
   $("#tapstart").remove();
+  startBGM();
   go("home");
   playPh("start");
 };
-renderHome(); refreshStars();
+renderHome(); refreshStars(); renderBgmBtn();
 </script>
 </body>
 </html>
