@@ -131,6 +131,7 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
 .scard li.now{background:var(--yellow);transform:scale(1.05)}
 .scard li.done .eqs{color:#b6a58c}
 .scard.cur{box-shadow:0 0 0 5px var(--yellow),var(--shadow)}
+.credit{align-self:center;font-size:12px;color:var(--sub);font-weight:500}
 </style>
 </head>
 <body>
@@ -234,10 +235,7 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
     </div>
     <div class="songbar">
       <button class="big" id="songGo">▶ はじめから</button>
-      <div class="seg" id="songSpeed">
-        <button data-sp="0">🐢 ゆっくり</button><button data-sp="1">🐰 ふつう</button><button data-sp="2">🚀 はやい</button>
-      </div>
-      <button class="big" id="songFushi">🎼 ふし: オフ</button>
+      <span class="credit">うた：VOICEVOX:ずんだもん</span>
     </div>
     <div class="songgrid" id="songGrid"></div>
   </section>
@@ -688,11 +686,11 @@ async function startPick(){
   await celebrate(S.friends > f0 ? FRIENDS[S.friends-1] : null, fin);
 }
 
-/* ---- くくのうた：1〜9のだんを ビートに合わせて 読みあげる ---- */
-const BEAT = 60 / 112;                 // BGM と同じテンポ
+/* ---- くくのうた：ずんだもんが 1〜9のだんを 歌う（BGM が伴奏） ----
+   音声 sing_<段>_Z.mp3 = 1小節の休み +「◯のだん」1小節 + 九九9小節（テンポ112・C-Am-F-G）
+   「◯のだん」が BGM の C の小節（4小節の区切り）に来るように 1小節手前から再生する */
+const BEAT = 60 / 112, BAR = BEAT * 4;
 const SONG_ORDER = [1,2,3,4,5,6,7,8,9];
-// ふし：段の中で 音の高さを少しずつ 上げ下げ（半音×100）
-const FUSHI = [0, 200, 400, 200, 0, 200, 400, 500, 700];
 const BUF = new Map();
 let songJobs = [];                     // 予約した音とタイマー（止めるとき用）
 let songOn = false;
@@ -711,8 +709,6 @@ function loadBuf(file){
   return p;
 }
 function renderSong(){
-  $$("#songSpeed button").forEach(x => x.classList.toggle("on", +x.dataset.sp === S.speed));
-  $("#songFushi").textContent = S.fushi ? "🎼 ふし: オン" : "🎼 ふし: オフ";
   const g = $("#songGrid");
   g.innerHTML = SONG_ORDER.map(d => `
     <div class="scard" data-dan="${d}">
@@ -722,75 +718,70 @@ function renderSong(){
   $$("#songGrid h4").forEach(h => h.onclick = () => startSong(+h.parentNode.dataset.dan));
 }
 $("#songGo").onclick = () => songOn ? (stopAll(), go("song")) : startSong(1);
-$$("#songSpeed button").forEach(b => b.onclick = () => {
-  S.speed = +b.dataset.sp; save();
-  $$("#songSpeed button").forEach(x => x.classList.toggle("on", x === b));
-});
-$("#songFushi").onclick = () => { S.fushi = !S.fushi; save(); $("#songFushi").textContent = S.fushi ? "🎼 ふし: オン" : "🎼 ふし: オフ"; };
 
 async function startSong(fromDan){
   stopAll(); const id = RUN;
   songOn = true;
   const btn = $("#songGo"); btn.textContent = "■ とめる"; btn.classList.add("stop");
   try { actx ||= new (window.AudioContext || window.webkitAudioContext)(); await actx.resume(); } catch(e) {}
-  const did = duck(true);
   const out = actx.createGain(); out.gain.value = 1; out.connect(actx.destination);
-  // 次の小節の頭（BGM が無いときは 今から）
-  const nextGrid = (t, beats) => {
-    if (!bgmSrc) return t;
-    const unit = BEAT * beats;
-    return bgmT0 + Math.ceil((t - bgmT0) / unit) * unit;
-  };
+  // 4小節の区切り（= C の小節）の時刻
+  const phrase = t => bgmSrc ? bgmT0 + Math.ceil((t - bgmT0) / (BAR * 4)) * BAR * 4 : t;
   const at = (t, fn) => { const h = setTimeout(fn, Math.max(0, (t - actx.currentTime) * 1000)); songJobs.push(h); };
-  const startI = SONG_ORDER.indexOf(fromDan);
-  let useBuf = true;
-  for (const d of SONG_ORDER.slice(startI)) {
+  const list = SONG_ORDER.slice(SONG_ORDER.indexOf(fromDan));
+  let head = null, firstHead = null;     // 「◯のだん」を歌う時刻
+  // すぐ歌いだせるように BGM を 8小節目（G）から かけなおす → 1小節の前奏のあと C の小節で歌いだし
+  try { await loadBuf(`sing_${list[0]}_Z`); } catch(e) {}
+  if (!alive(id)) return;
+  if (bgmSrc) {
+    const t0 = actx.currentTime + .1, ns = actx.createBufferSource();
+    ns.buffer = bgmSrc.buffer; ns.loop = true; ns.connect(bgmGain);
+    ns.start(t0, BAR * 7); try { bgmSrc.stop(t0); } catch(e) {}
+    bgmSrc = ns; bgmT0 = t0 - BAR * 7; firstHead = t0 + BAR;
+  }
+  for (const [k, d] of list.entries()) {
     if (!alive(id)) return;
-    const v = voice();
-    const files = [`ph_dan${d}_${v}`, ...KUKU[d].map((_, i) => `full_${d}x${i+1}_${v}`)];
-    let bufs = null;
-    if (useBuf) { try { bufs = await Promise.all(files.map(loadBuf)); } catch(e) { useBuf = false; } }
+    let buf = null;
+    try { buf = await loadBuf(`sing_${d}_Z`); } catch(e) {}
+    if (list[k+1]) loadBuf(`sing_${list[k+1]}_Z`).catch(() => {});   // つぎの段を さきに読みこむ
     if (!alive(id)) return;
     const card = $(`#songGrid .scard[data-dan="${d}"]`);
-    $$("#songGrid .scard.cur").forEach(e => e.classList.remove("cur"));
-    card.classList.add("cur");
-    card.scrollIntoView({ behavior: "smooth", block: "nearest" });
 
-    if (!bufs) {
-      // 予備：音声が読めないときは ふつうの読みあげで 順番に
+    if (!buf) {
+      // 予備：歌が読めないときは ふつうの読みあげで
+      $$("#songGrid .scard.cur").forEach(e => e.classList.remove("cur")); card.classList.add("cur");
+      card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      const v = voice();
       await playPh("dan" + d, v); if (!alive(id)) return;
       for (let b = 1; b <= 9; b++) {
         const li = $(`li[data-b="${b}"]`, card); li.classList.add("now");
         await playFull(d, b, v); if (!alive(id)) return;
         li.classList.remove("now"); li.classList.add("done"); await sleep(250);
       }
+      head = null;
     } else {
-      // 1行あたりの拍数を 段の中で そろえる（ゆっくり6拍・ふつう4拍・はやい3拍）
-      const rate = 1;
-      const base = [6, 4, 3][S.speed] ?? 4;
-      const longest = Math.max(...bufs.slice(1).map((x, i) => x.duration / Math.pow(2, (S.fushi ? FUSHI[i] : 0) / 1200)));
-      const lineBeats = Math.max(base, Math.ceil((longest + .15) / BEAT));
-      const slot = (dur, isHead) => isHead ? Math.max(4, Math.ceil(dur / BEAT / 4) * 4) : lineBeats;   // 「◯のだん」は1小節
-      let t = nextGrid(actx.currentTime + .25, 4);      // 小節の頭から
-      const items = [{ buf: bufs[0], li: null, det: 0 }].concat(bufs.slice(1).map((buf, i) => ({
-        buf, li: $(`li[data-b="${i+1}"]`, card), det: S.fushi ? FUSHI[i] : 0 })));
-      for (const [k, it] of items.entries()) {
-        const src = actx.createBufferSource(); src.buffer = it.buf;
-        src.playbackRate.value = rate; src.detune.value = it.det;
-        src.connect(out); src.start(t); songJobs.push(src);
-        const li = it.li;
-        if (li) at(t, () => { $$("#songGrid li.now").forEach(e => { e.classList.remove("now"); e.classList.add("done"); }); li.classList.add("now"); li.scrollIntoView({ behavior: "smooth", block: "nearest" }); });
-        t += slot(it.buf.duration, k === 0) * BEAT;
+      head = head ? phrase(head + BAR * 10) : firstHead && firstHead > actx.currentTime + .05 ? firstHead : phrase(actx.currentTime + BAR + .2);
+      const src = actx.createBufferSource(); src.buffer = buf;
+      src.connect(out); src.start(head - BAR); songJobs.push(src);
+      at(head, () => {
+        $$("#songGrid .scard.cur").forEach(e => e.classList.remove("cur")); card.classList.add("cur");
+        card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+      for (let b = 1; b <= 9; b++) {
+        const li = $(`li[data-b="${b}"]`, card);
+        at(head + BAR * b, () => {
+          $$("#songGrid li.now").forEach(e => { e.classList.remove("now"); e.classList.add("done"); });
+          li.classList.add("now"); li.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
       }
-      t = nextGrid(t, 4);                               // つぎの段は 小節の頭から
-      // この段が おわるまで まつ
-      while (actx.currentTime < t - .3) { if (!alive(id)) return; await sleep(100); }
+      // この段の さいごの行が おわるまで まつ
+      while (actx.currentTime < head + BAR * 10 - .2) { if (!alive(id)) return; await sleep(100); }
       $$("li.now", card).forEach(e => { e.classList.remove("now"); e.classList.add("done"); });
     }
     addStars(1);
   }
-  duck(false, did);
   if (!alive(id)) return;
+  await sleep(1500); if (!alive(id)) return;
   songOn = false; btn.textContent = "▶ はじめから"; btn.classList.remove("stop");
   $$("#songGrid .scard.cur").forEach(e => e.classList.remove("cur"));
   await playPh("clear");
