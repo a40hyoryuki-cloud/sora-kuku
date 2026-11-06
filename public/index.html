@@ -113,6 +113,10 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
 #tapstart{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:linear-gradient(180deg,var(--sky),var(--bg))}
 #tapstart h1{margin:0;font-size:clamp(38px,10vw,64px);color:#ff7a3d;text-shadow:3px 3px 0 #fff}
 #tapstart .big{height:84px;font-size:32px;padding:0 40px;background:var(--orange);color:#fff}
+#resume{position:fixed;inset:0;z-index:45;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:linear-gradient(180deg,var(--sky),var(--bg))}
+#resume h1{margin:0;font-size:clamp(38px,10vw,64px);color:#ff7a3d;text-shadow:3px 3px 0 #fff}
+#resume .big{height:84px;font-size:32px;padding:0 40px;background:var(--orange);color:#fff}
+#resume .chars{font-size:clamp(46px,12vw,72px);letter-spacing:8px}
 #tapstart .chars{font-size:clamp(46px,12vw,72px);letter-spacing:8px}
 @media (orientation:landscape){.dangrid{max-width:min(720px,calc((100vh - 340px) * 1.1));max-width:min(720px,calc((100dvh - 340px) * 1.1))}#home .title h1{font-size:clamp(30px,6vh,52px)}}
 /* くくのうた */
@@ -135,6 +139,11 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
 </style>
 </head>
 <body>
+<div id="resume" style="display:none">
+  <div class="chars">😴🎵</div>
+  <h1>おかえり！</h1>
+  <button class="big" id="resumeBtn">▶ つづける</button>
+</div>
 <div id="tapstart">
   <div class="chars">🐣🦖🐙</div>
   <h1>そらの くくランド</h1>
@@ -437,16 +446,14 @@ function duck(on, id){
   speaking = false; clearTimeout(duckT); duckT = setTimeout(() => applyBGM(.35), 700);
 }
 function renderBgmBtn(){ $("#bgmBtn").textContent = S.bgm ? "🎵" : "🔇"; }
-document.addEventListener("visibilitychange", () => {
-  if (!actx) return;
-  if (document.hidden) actx.suspend(); else actx.resume();
-});
 
 /* ============ 画面 ============ */
 const $ = (s, el=document) => el.querySelector(s);
 const $$ = (s, el=document) => [...el.querySelectorAll(s)];
 let DAN = 2;
+let CUR = "home";
 function go(id){
+  CUR = id;
   stopAll();
   $$(".screen").forEach(s => s.classList.toggle("on", s.id === id));
   refreshStars();
@@ -813,6 +820,7 @@ function renderZukan(){
 
 /* ---- はじめる（iPhoneは タッチしてから でないと 音が出ない） ---- */
 $("#startBtn").onclick = () => {
+  started = true; claimAudio();
   try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch(e) {}
   try { actx ||= new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch(e) {}
   AU.src = "data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQxAADB8AhSmxhIIEVCSiJrDCQBTcu3UrAIwUdkRgQbFAZC1CQEwTJ9mjRvBA4UOLD8nKVOWfh+UlK3z/177OXrfOdKl7pyn3Xf//WreyTRUoAWgBgkOAGbZHBgG1OF6zM82DWbZaUmMBptgQhGjsyYqc9ae9XFz280948NMBWInljyzsNRFLPWdnZGWrddDsjK1unuSrVN9jJsK8KuQtQCtMBjCEtImISdNKJOopIpBFpNSMbIHCSRpRR5iakjTiyzLhchUUBwCgyKiweBv/7UsQbg8isVNoMPMjAAAA0gAAABEVFGmgqK////9bP/6XCykxBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
@@ -822,6 +830,44 @@ $("#startBtn").onclick = () => {
   go("home");
   playPh("start");
 };
+/* ---- 開いた時・閉じる時の 音の始末 ----
+   裏に回る／閉じる／ほかの画面に移る → すべての音を止めて 音のエンジンも止める
+   戻ってきた時は 勝手に鳴らさず「▶ つづける」をタップしてから鳴らす */
+let started = false, halted = false;
+const TAB_ID = Math.random().toString(36).slice(2);
+let bc = null; try { bc = new BroadcastChannel("sora-kuku"); } catch(e) {}
+function haltAudio(){
+  if (!started || halted) return;
+  halted = true;
+  stopAll();
+  try { if (actx && actx.state !== "closed") actx.suspend(); } catch(e) {}
+  $("#modal").classList.remove("on");
+}
+function askResume(){
+  if (!halted || document.hidden) return;
+  $("#resume").style.display = "flex";
+}
+function claimAudio(){ try { bc && bc.postMessage({ t: "claim", id: TAB_ID }); } catch(e) {} }
+if (bc) bc.onmessage = e => {
+  // ほかの画面（タブ）で 遊びはじめた → こちらは 止めて待つ
+  if (e.data && e.data.t === "claim" && e.data.id !== TAB_ID) { haltAudio(); askResume(); }
+};
+document.addEventListener("visibilitychange", () => { if (document.hidden) haltAudio(); else askResume(); });
+window.addEventListener("pagehide", haltAudio);
+document.addEventListener("freeze", haltAudio);
+window.addEventListener("blur", haltAudio);
+window.addEventListener("pageshow", e => { if (e.persisted) { halted = halted || started; askResume(); } });
+window.addEventListener("focus", askResume);
+$("#resumeBtn").onclick = () => {
+  claimAudio();
+  try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch(e) {}
+  try { actx && actx.resume(); } catch(e) {}
+  halted = false;
+  $("#resume").style.display = "none";
+  applyBGM(.3);
+  go(CUR);                                   // 止めた遊びは そのページの はじめから
+};
+
 renderHome(); refreshStars(); renderBgmBtn();
 </script>
 </body>
