@@ -129,7 +129,7 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
 .scard h4{margin:0;padding:8px 10px 8px 12px;border-radius:22px 22px 0 0;white-space:nowrap;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:space-between;cursor:pointer}
 .scard h4 small{font-size:14px;background:#fff3;border-radius:12px;padding:3px 10px}
 .scard ol{list-style:none;margin:0;padding:6px 8px 8px}
-.scard li{scroll-margin:60px;display:flex;flex-direction:column;padding:3px 8px;border-radius:12px;transition:background .15s,transform .15s}
+.scard li{cursor:pointer;scroll-margin:60px;display:flex;flex-direction:column;padding:3px 8px;border-radius:12px;transition:background .15s,transform .15s}
 .scard li .eqs{font-size:21px;line-height:1.2}
 .scard li .yo{font-size:11px;color:var(--sub);font-weight:500;line-height:1.2}
 .scard li.now{background:var(--yellow);transform:scale(1.05)}
@@ -141,7 +141,7 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
 #song.table .kt{display:flex}
 #song.table .songgrid{display:none}
 .ktg{display:grid;grid-template-columns:repeat(10,1fr);gap:3px;width:min(100%,calc(100vh - 290px),720px);width:min(100%,calc(100dvh - 290px),720px)}
-.ktg div{aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;border-radius:8px;background:#fff;font-size:clamp(13px,3.6vw,26px);transition:background .15s,transform .15s,box-shadow .15s;box-shadow:0 2px 0 rgba(120,80,30,.12)}
+.ktg div{cursor:pointer;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;border-radius:8px;background:#fff;font-size:clamp(13px,3.6vw,26px);transition:background .15s,transform .15s,box-shadow .15s;box-shadow:0 2px 0 rgba(120,80,30,.12)}
 .ktg .hd{color:#fff;font-size:clamp(15px,4.2vw,30px);cursor:pointer}
 .ktg .x{background:transparent;box-shadow:none;color:var(--sub)}
 .ktg .ch{background:#e9dcc3;color:var(--ink)}
@@ -778,8 +778,9 @@ function renderTable(){
     h += `<div class="hd" data-dan="${r}" style="background:${DAN_COLOR[r]}">${r}</div>`;
     for (let c = 1; c <= 9; c++) h += `<div data-r="${r}" data-c="${c}">${r*c}</div>`;
   }
-  $("#songTable").innerHTML = `<div class="ktg">${h}</div><div class="ktcap"><div class="f">&nbsp;</div><div class="y">ひだりの かずを タッチすると その だんから うたうよ</div></div>`;
+  $("#songTable").innerHTML = `<div class="ktg">${h}</div><div class="ktcap"><div class="f">&nbsp;</div><div class="y">マスを タッチすると そこから うたうよ</div></div>`;
   $$("#songTable .hd").forEach(e => e.onclick = () => startSong(+e.dataset.dan));
+  $$("#songTable [data-r]").forEach(e => e.onclick = () => startSong(+e.dataset.r, +e.dataset.c));
 }
 function renderSong(){
   renderTable(); setSongView(S.songView || "card");
@@ -790,10 +791,11 @@ function renderSong(){
       <ol>${KUKU[d].map(([c,a],i) => `<li data-b="${i+1}"><span class="eqs">${d} × ${i+1} = ${d*(i+1)}</span><span class="yo">${c} ${a}</span></li>`).join("")}</ol>
     </div>`).join("");
   $$("#songGrid h4").forEach(h => h.onclick = () => startSong(+h.parentNode.dataset.dan));
+  $$("#songGrid li").forEach(li => li.onclick = () => startSong(+li.closest(".scard").dataset.dan, +li.dataset.b));
 }
 $("#songGo").onclick = () => songOn ? (stopAll(), go("song")) : startSong(1);
 
-async function startSong(fromDan){
+async function startSong(fromDan, fromLine = 1){
   stopAll(); const id = RUN;
   songOn = true;
   const btn = $("#songGo"); btn.textContent = "■ とめる"; btn.classList.add("stop");
@@ -804,14 +806,18 @@ async function startSong(fromDan){
   const at = (t, fn) => { const h = setTimeout(fn, Math.max(0, (t - actx.currentTime) * 1000)); songJobs.push(h); };
   const list = SONG_ORDER.slice(SONG_ORDER.indexOf(fromDan));
   let head = null, firstHead = null;     // 「◯のだん」を歌う時刻
-  // すぐ歌いだせるように BGM を 8小節目（G）から かけなおす → 1小節の前奏のあと C の小節で歌いだし
+  // 行の途中から歌うときは その行の コード（C-Am-F-G）に BGM を合わせる
+  const firstChord = fromLine > 1 ? fromLine % 4 : 0;
+  // すぐ歌いだせるように BGM を 1小節手前から かけなおす → 1小節の前奏のあと 歌いだし
   try { await loadBuf(`sing_${list[0]}_Z`); } catch(e) {}
   if (!alive(id)) return;
   if (bgmSrc) {
     const t0 = actx.currentTime + .1, ns = actx.createBufferSource();
     ns.buffer = bgmSrc.buffer; ns.loop = true; ns.connect(bgmGain);
-    ns.start(t0, BAR * 7); try { bgmSrc.stop(t0); } catch(e) {}
-    bgmSrc = ns; bgmT0 = t0 - BAR * 7; firstHead = t0 + BAR;
+    const ob = (firstChord + 7) % 8;
+    ns.start(t0, BAR * ob); try { bgmSrc.stop(t0); } catch(e) {}
+    bgmSrc = ns; bgmT0 = t0 - BAR * ob;
+    firstHead = t0 + BAR - (fromLine > 1 ? BAR * fromLine : 0);   // 「◯のだん」の時刻（行から始めるときは 計算上の時刻）
   }
   for (const [k, d] of list.entries()) {
     if (!alive(id)) return;
@@ -824,7 +830,7 @@ async function startSong(fromDan){
       hlDan(d);
       const v = voice();
       await playPh("dan" + d, v); if (!alive(id)) return;
-      for (let b = 1; b <= 9; b++) {
+      for (let b = k === 0 ? fromLine : 1; b <= 9; b++) {
         hlLine(d, b);
         await playFull(d, b, v); if (!alive(id)) return;
         await sleep(250);
@@ -832,11 +838,21 @@ async function startSong(fromDan){
       hlDanEnd(d);
       head = null;
     } else {
-      head = head ? phrase(head + BAR * 10) : firstHead && firstHead > actx.currentTime + .05 ? firstHead : phrase(actx.currentTime + BAR + .2);
-      const src = actx.createBufferSource(); src.buffer = buf;
-      src.connect(out); src.start(head - BAR); songJobs.push(src);
-      at(head, () => hlDan(d));
-      for (let b = 1; b <= 9; b++) at(head + BAR * b, () => hlLine(d, b));
+      const line0 = k === 0 ? fromLine : 1;           // この段で 歌いはじめる行
+      if (head) head = phrase(head + BAR * 10);
+      else if (firstHead !== null) head = firstHead;
+      else head = phrase(actx.currentTime + BAR + .2 + (line0 > 1 ? BAR * line0 : 0)) - (line0 > 1 ? BAR * line0 : 0);
+      const src = actx.createBufferSource(); src.buffer = buf; src.connect(out);
+      if (line0 > 1) {
+        const t1 = head + BAR * line0;               // その行の 小節の頭
+        src.start(t1, BAR * (1 + line0));            // 音声の その行の ところから
+        at(t1 - .05, () => { hlDan(d); for (let b = 1; b < line0; b++) $(`#songTable [data-r="${d}"][data-c="${b}"]`).classList.add("done"); });
+      } else {
+        src.start(head - BAR);
+        at(head, () => hlDan(d));
+      }
+      songJobs.push(src);
+      for (let b = line0; b <= 9; b++) at(head + BAR * b, () => hlLine(d, b));
       // この段の さいごの行が おわるまで まつ
       while (actx.currentTime < head + BAR * 10 - .2) { if (!alive(id)) return; await sleep(100); }
       hlDanEnd(d);
