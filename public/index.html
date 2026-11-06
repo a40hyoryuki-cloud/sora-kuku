@@ -136,6 +136,22 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
 .scard li.done .eqs{color:#b6a58c}
 .scard.cur{box-shadow:0 0 0 5px var(--yellow),var(--shadow)}
 .credit{align-self:center;font-size:12px;color:var(--sub);font-weight:500}
+/* 9×9 の ひょう */
+.kt{flex:1;min-height:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+#song.table .kt{display:flex}
+#song.table .songgrid{display:none}
+.ktg{display:grid;grid-template-columns:repeat(10,1fr);gap:3px;width:min(100%,calc(100vh - 290px),720px);width:min(100%,calc(100dvh - 290px),720px)}
+.ktg div{aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;border-radius:8px;background:#fff;font-size:clamp(13px,3.6vw,26px);transition:background .15s,transform .15s,box-shadow .15s;box-shadow:0 2px 0 rgba(120,80,30,.12)}
+.ktg .hd{color:#fff;font-size:clamp(15px,4.2vw,30px);cursor:pointer}
+.ktg .x{background:transparent;box-shadow:none;color:var(--sub)}
+.ktg .ch{background:#e9dcc3;color:var(--ink)}
+.ktg .row{background:#fff6cf}
+.ktg .done{color:#b6a58c;background:#fffbea}
+.ktg .ch.on,.ktg .hd.on{transform:scale(1.12);box-shadow:0 0 0 3px var(--yellow)}
+.ktg .now{background:var(--yellow);color:var(--ink);transform:scale(1.35);box-shadow:0 0 0 4px #fff,0 0 18px 6px rgba(255,190,40,.9);z-index:2;position:relative}
+.ktcap{background:#fff;border-radius:22px;box-shadow:var(--shadow);padding:8px 22px;text-align:center;min-width:min(92vw,440px)}
+.ktcap .f{font-size:clamp(30px,8vw,52px);line-height:1.15}
+.ktcap .y{font-size:clamp(15px,4vw,22px);color:var(--sub);min-height:1.3em}
 </style>
 </head>
 <body>
@@ -244,9 +260,13 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
     </div>
     <div class="songbar">
       <button class="big" id="songGo">▶ はじめから</button>
+      <div class="seg" id="songView">
+        <button data-v="card">📋 カード</button><button data-v="table">🔢 ひょう</button>
+      </div>
       <span class="credit">うた：VOICEVOX:ずんだもん</span>
     </div>
     <div class="songgrid" id="songGrid"></div>
+    <div class="kt" id="songTable"></div>
   </section>
 
   <!-- なかま図鑑 -->
@@ -705,8 +725,7 @@ function songStop(){
   songJobs.forEach(j => { try { j.stop ? j.stop() : clearTimeout(j); } catch(e) {} });
   songJobs = []; songOn = false;
   const b = $("#songGo"); if (b) { b.textContent = "▶ はじめから"; b.classList.remove("stop"); }
-  $$("#songGrid li.now").forEach(e => e.classList.remove("now"));
-  $$("#songGrid .scard.cur").forEach(e => e.classList.remove("cur"));
+  hlClear();
 }
 function loadBuf(file){
   if (BUF.has(file)) return BUF.get(file);
@@ -715,7 +734,55 @@ function loadBuf(file){
   BUF.set(file, p); p.catch(() => BUF.delete(file));
   return p;
 }
+// 光らせる（カードと ひょう の両方）
+function hlClear(){
+  $$("#songGrid li.now").forEach(e => e.classList.remove("now"));
+  $$("#songGrid .scard.cur").forEach(e => e.classList.remove("cur"));
+  $$("#songTable .now,#songTable .row,#songTable .on").forEach(e => e.classList.remove("now","row","on"));
+  setCap("", "");
+}
+function setCap(f, y){ const c = $("#songTable .ktcap"); if (!c) return; $(".f", c).textContent = f || "\u00a0"; $(".y", c).textContent = y || "\u00a0"; }
+function hlDan(d){
+  $$("#songGrid .scard.cur").forEach(e => e.classList.remove("cur"));
+  const card = $(`#songGrid .scard[data-dan="${d}"]`); card.classList.add("cur");
+  if (S.songView !== "table") card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  $$("#songTable .row,#songTable .on,#songTable .now").forEach(e => e.classList.remove("row","on","now"));
+  $$(`#songTable [data-r="${d}"]`).forEach(e => e.classList.add("row"));
+  $(`#songTable .hd[data-dan="${d}"]`).classList.add("on");
+  setCap(`${d}のだん`, "");
+}
+function hlLine(d, b){
+  $$("#songGrid li.now").forEach(e => { e.classList.remove("now"); e.classList.add("done"); });
+  const li = $(`#songGrid .scard[data-dan="${d}"] li[data-b="${b}"]`); li.classList.add("now");
+  if (S.songView !== "table") li.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  $$("#songTable .now").forEach(e => { e.classList.remove("now"); e.classList.add("done"); });
+  $$("#songTable .ch.on").forEach(e => e.classList.remove("on"));
+  $(`#songTable [data-r="${d}"][data-c="${b}"]`).classList.add("now");
+  $(`#songTable .ch[data-c="${b}"]`).classList.add("on");
+  setCap(`${d} × ${b} = ${d*b}`, KUKU[d][b-1].join(" "));
+}
+function hlDanEnd(d){
+  $$(`#songGrid .scard[data-dan="${d}"] li.now`).forEach(e => { e.classList.remove("now"); e.classList.add("done"); });
+  $$("#songTable .now").forEach(e => { e.classList.remove("now"); e.classList.add("done"); });
+}
+function setSongView(v){
+  S.songView = v; save();
+  $("#song").classList.toggle("table", v === "table");
+  $$("#songView button").forEach(x => x.classList.toggle("on", x.dataset.v === v));
+}
+$$("#songView button").forEach(b => b.onclick = () => setSongView(b.dataset.v));
+function renderTable(){
+  let h = `<div class="x">×</div>`;
+  for (let c = 1; c <= 9; c++) h += `<div class="ch" data-c="${c}">${c}</div>`;
+  for (let r = 1; r <= 9; r++) {
+    h += `<div class="hd" data-dan="${r}" style="background:${DAN_COLOR[r]}">${r}</div>`;
+    for (let c = 1; c <= 9; c++) h += `<div data-r="${r}" data-c="${c}">${r*c}</div>`;
+  }
+  $("#songTable").innerHTML = `<div class="ktg">${h}</div><div class="ktcap"><div class="f">&nbsp;</div><div class="y">ひだりの かずを タッチすると その だんから うたうよ</div></div>`;
+  $$("#songTable .hd").forEach(e => e.onclick = () => startSong(+e.dataset.dan));
+}
 function renderSong(){
+  renderTable(); setSongView(S.songView || "card");
   const g = $("#songGrid");
   g.innerHTML = SONG_ORDER.map(d => `
     <div class="scard" data-dan="${d}">
@@ -752,45 +819,34 @@ async function startSong(fromDan){
     try { buf = await loadBuf(`sing_${d}_Z`); } catch(e) {}
     if (list[k+1]) loadBuf(`sing_${list[k+1]}_Z`).catch(() => {});   // つぎの段を さきに読みこむ
     if (!alive(id)) return;
-    const card = $(`#songGrid .scard[data-dan="${d}"]`);
-
     if (!buf) {
       // 予備：歌が読めないときは ふつうの読みあげで
-      $$("#songGrid .scard.cur").forEach(e => e.classList.remove("cur")); card.classList.add("cur");
-      card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      hlDan(d);
       const v = voice();
       await playPh("dan" + d, v); if (!alive(id)) return;
       for (let b = 1; b <= 9; b++) {
-        const li = $(`li[data-b="${b}"]`, card); li.classList.add("now");
+        hlLine(d, b);
         await playFull(d, b, v); if (!alive(id)) return;
-        li.classList.remove("now"); li.classList.add("done"); await sleep(250);
+        await sleep(250);
       }
+      hlDanEnd(d);
       head = null;
     } else {
       head = head ? phrase(head + BAR * 10) : firstHead && firstHead > actx.currentTime + .05 ? firstHead : phrase(actx.currentTime + BAR + .2);
       const src = actx.createBufferSource(); src.buffer = buf;
       src.connect(out); src.start(head - BAR); songJobs.push(src);
-      at(head, () => {
-        $$("#songGrid .scard.cur").forEach(e => e.classList.remove("cur")); card.classList.add("cur");
-        card.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      });
-      for (let b = 1; b <= 9; b++) {
-        const li = $(`li[data-b="${b}"]`, card);
-        at(head + BAR * b, () => {
-          $$("#songGrid li.now").forEach(e => { e.classList.remove("now"); e.classList.add("done"); });
-          li.classList.add("now"); li.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        });
-      }
+      at(head, () => hlDan(d));
+      for (let b = 1; b <= 9; b++) at(head + BAR * b, () => hlLine(d, b));
       // この段の さいごの行が おわるまで まつ
       while (actx.currentTime < head + BAR * 10 - .2) { if (!alive(id)) return; await sleep(100); }
-      $$("li.now", card).forEach(e => { e.classList.remove("now"); e.classList.add("done"); });
+      hlDanEnd(d);
     }
     addStars(1);
   }
   if (!alive(id)) return;
   await sleep(1500); if (!alive(id)) return;
   songOn = false; btn.textContent = "▶ はじめから"; btn.classList.remove("stop");
-  $$("#songGrid .scard.cur").forEach(e => e.classList.remove("cur"));
+  hlClear(); setCap("🎉", "ぜんぶ うたえたね！");
   await playPh("clear");
 }
 
