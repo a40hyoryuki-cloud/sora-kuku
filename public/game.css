@@ -1,0 +1,87 @@
+/* かけざん レベルアップ */
+#gTitle{color:#ff7a3d;text-shadow:2px 2px 0 #fff;white-space:nowrap;font-size:clamp(20px,5.8vw,32px)}
+.ghome{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:12px;max-width:640px;width:100%;margin:0 auto;padding:4px 2px 16px;-webkit-overflow-scrolling:touch}
+.gme{background:#fff;border-radius:28px;box-shadow:var(--shadow);padding:14px 18px;display:flex;align-items:center;gap:14px}
+.gme .ava{font-size:64px;line-height:1;position:relative;flex:none}
+.crown{position:absolute;left:50%;top:-.55em;transform:translateX(-50%);font-size:.55em;filter:drop-shadow(0 2px 0 rgba(0,0,0,.15))}
+.gme .lv{font-size:clamp(34px,10vw,52px);line-height:1;color:#ff7a3d}
+.gme .lv small{font-size:.45em;color:var(--sub)}
+.gme .info{flex:1;min-width:0}
+.pbar{height:16px;background:#f3ead6;border-radius:8px;overflow:hidden;margin-top:8px}
+.pbar div{height:100%;background:linear-gradient(90deg,var(--yellow),var(--orange));border-radius:8px;transition:width .4s}
+.gstages{display:flex;flex-direction:column;gap:10px}
+.gstage{border-radius:24px;box-shadow:var(--shadow);padding:10px 16px;display:flex;align-items:center;gap:14px;color:#fff;text-align:left;width:100%}
+.gstage .ic{font-size:46px;line-height:1;position:relative;flex:none;width:56px;text-align:center}
+.gstage b{display:block;font-size:clamp(18px,5.2vw,26px);white-space:nowrap;overflow:hidden;text-overflow:clip}
+.gstage .meta{flex:1;min-width:0}
+.gstage .pbar{background:#fff5;height:12px;margin-top:4px}
+.gstage .pbar div{background:#fff}
+.gstage .lvt{font-size:clamp(18px,5vw,24px);flex:none}
+.gstage.lock{background:#d9d0c2 !important;color:#fff9}
+.gstage.lock .ic{filter:grayscale(1);opacity:.5}
+.gstage.max .lvt{background:#fff;color:#ff7a3d;border-radius:14px;padding:2px 10px}
+.gstage:active{transform:translateY(4px);box-shadow:0 2px 0 rgba(120,80,30,.18)}
+.gstamps{background:#fff;border-radius:24px;box-shadow:var(--shadow);padding:10px 14px}
+.gstamps h3{margin:0 0 6px;font-size:18px;color:var(--sub)}
+.gstamps .row{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.gstamps .sp{aspect-ratio:1/1;border-radius:50%;border:3px dashed #e8d9b8;display:flex;align-items:center;justify-content:center;font-size:clamp(22px,7vw,34px);position:relative}
+.gstamps .sp.got{border:3px solid #ffc84a;background:#fff6d6;animation:pop .4s}
+.gstamps .sp small{position:absolute;bottom:-6px;font-size:11px;white-space:nowrap;color:var(--sub);background:#fff;border-radius:6px;padding:0 3px}
+.groom{height:60px;border-radius:30px;background:#fff;box-shadow:var(--shadow);font-size:20px}
+.groom.lock{color:#bbb}
+.gcredit{text-align:center;font-size:11px;color:var(--sub);font-weight:500}
+
+/* プレイ画面 */
+.gbar{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;align-items:center}
+.gst{font-size:clamp(18px,5vw,26px)}
+.gxp{width:min(100%,360px);height:14px;background:#fff;border-radius:7px;overflow:hidden;box-shadow:inset 0 0 0 2px var(--line)}
+.gxp div{height:100%;width:0;background:linear-gradient(90deg,var(--yellow),var(--orange));transition:width .4s}
+.glv{min-width:72px;height:48px;border-radius:24px;background:#fff;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center;font-size:20px;color:#ff7a3d;padding:0 10px}
+.garea{flex:1;min-height:0;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;gap:clamp(8px,2.4vw,18px);padding:6px 0}
+.plate{--ps:clamp(100px,30vw,180px);width:var(--ps);height:var(--ps);border-radius:50%;background:radial-gradient(circle,#fff 58%,#f1e6cf 60%,#fff 64%);box-shadow:0 5px 0 rgba(120,80,30,.16);display:flex;flex-wrap:wrap;align-content:center;justify-content:center;gap:2px;padding:14%;position:relative;transition:transform .15s,opacity .2s,box-shadow .2s;cursor:pointer}
+.plate.sm{--ps:clamp(72px,21vw,130px)}
+.plate.xs{--ps:clamp(56px,15.5vw,100px)}
+.plate .it,.plate .slot{flex:none;box-sizing:border-box;width:calc(var(--ps) * .22);height:calc(var(--ps) * .22);font-size:calc(var(--ps) * .19);line-height:1;display:flex;align-items:center;justify-content:center;position:relative;border-radius:50%}
+.plate.few .it,.plate.few .slot{width:calc(var(--ps) * .34);height:calc(var(--ps) * .34);font-size:calc(var(--ps) * .3)}
+.plate.mid .it,.plate.mid .slot{width:calc(var(--ps) * .27);height:calc(var(--ps) * .27);font-size:calc(var(--ps) * .23)}
+.plate.many .it,.plate.many .slot{width:calc(var(--ps) * .2);height:calc(var(--ps) * .2);font-size:calc(var(--ps) * .17)}
+.plate .slot{border:2px dashed #e2cfa6}
+.plate .it.done{filter:drop-shadow(0 0 4px #ffd23f)}
+.plate .it .no{position:absolute;right:-6px;top:-6px;background:var(--orange);color:#fff;border-radius:10px;font-size:11px;min-width:18px;height:18px;line-height:18px;text-align:center}
+.plate.dim{opacity:.55}
+.plate.lit{opacity:1;box-shadow:0 0 0 5px var(--yellow),0 5px 0 rgba(120,80,30,.16);transform:scale(1.05)}
+.plate .tot{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--orange);color:#fff;border-radius:14px;padding:0 10px;font-size:clamp(16px,4.4vw,22px);animation:pop .3s}
+.plate.full{box-shadow:0 0 0 4px var(--green),0 5px 0 rgba(120,80,30,.16)}
+.shake{animation:shake .4s}
+.arr{display:flex;flex-direction:column;gap:6px;transition:transform .8s ease}
+.arr.turn{transform:rotate(90deg)}
+.arow{display:flex;gap:4px;align-items:center;padding:4px 10px;border-radius:16px;background:#fff;box-shadow:0 3px 0 rgba(120,80,30,.14);opacity:.55;cursor:pointer;position:relative;transition:opacity .2s,transform .15s}
+.arow span{font-size:clamp(24px,7.5vw,42px);line-height:1.1}
+.arow.lit{opacity:1;box-shadow:0 0 0 4px var(--yellow);transform:scale(1.03)}
+.arow .tot{position:absolute;right:-48px;background:var(--orange);color:#fff;border-radius:12px;padding:0 8px;font-size:18px}
+.arr.turn .arow .tot{display:none}
+.geq{text-align:center;min-height:86px}
+.geq .c{font-size:clamp(15px,4.2vw,22px);color:var(--sub);min-height:1.3em}
+.geq .f{font-size:clamp(34px,10vw,60px);line-height:1.15}
+.geq .f .q{color:var(--orange)}
+.gans{display:flex;gap:clamp(10px,3vw,22px);justify-content:center;min-height:96px;padding-bottom:4px}
+.gans button{width:clamp(84px,24vw,140px);height:clamp(76px,20vw,112px);border-radius:26px;background:#fff;box-shadow:var(--shadow);font-size:clamp(36px,10vw,60px);color:var(--ink);animation:pop .3s}
+.gans button.ng{opacity:.3}
+.gans button.ok{background:var(--green);color:#fff}
+.ghint{font-size:clamp(17px,4.6vw,24px);color:var(--sub);align-self:center}
+
+/* レベルアップ */
+#lvup{position:fixed;inset:0;z-index:35;display:none;align-items:center;justify-content:center;background:rgba(60,40,20,.5);padding:16px}
+#lvup.on{display:flex}
+.lvbox{background:#fff;border-radius:36px;padding:22px 22px 24px;text-align:center;max-width:440px;width:100%;position:relative;overflow:hidden;animation:pop .45s}
+.lvbox .burst{position:absolute;inset:-40%;background:repeating-conic-gradient(#fff3c4 0 10deg,#fff 10deg 20deg);animation:spin 8s linear infinite;z-index:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.lvbox>*{position:relative;z-index:1}
+.lvbox .icon{font-size:96px;line-height:1.2;position:relative;display:inline-block;animation:bounce 1s infinite}
+.lvbox .icon .crown{font-size:.6em;top:-.5em}
+.lvbox .big1{font-size:28px;color:var(--sub)}
+.lvbox .big2{font-size:clamp(64px,20vw,110px);line-height:1;color:#ff7a3d;text-shadow:3px 3px 0 #ffe7a8}
+.lvbox .sub{font-size:18px;color:var(--sub);margin:6px 0 14px;min-height:1.3em}
+.lvbox .big{margin:0 auto;background:var(--orange);color:#fff}
+.confetti{position:fixed;top:-40px;font-size:28px;z-index:36;pointer-events:none;animation:fall linear forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(540deg)}}

@@ -12,6 +12,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="game.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800&display=swap" rel="stylesheet">
@@ -168,13 +169,36 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
 
 <div id="app">
   <!-- ホーム -->
+  <!-- ゲームのホーム（かけざん レベルアップ） -->
   <section class="screen on" id="home">
     <div class="top">
       <button class="back" id="bgmBtn" aria-label="BGM">🎵</button>
+      <h2 id="gTitle">かけざん レベルアップ</h2>
+      <div style="width:56px"></div>
+    </div>
+    <div class="ghome" id="gHome"></div>
+  </section>
+
+  <!-- ゲームの プレイ画面 -->
+  <section class="screen" id="game">
+    <div class="top">
+      <button class="back" data-go="home">←</button>
+      <div class="gbar"><div class="gst" id="gStage"></div><div class="gxp"><div id="gXp"></div></div></div>
+      <div class="glv" id="gLv">Lv 1</div>
+    </div>
+    <div class="garea" id="gArea"></div>
+    <div class="geq" id="gEq"><div class="c">&nbsp;</div><div class="f">&nbsp;</div></div>
+    <div class="gans" id="gAns"></div>
+  </section>
+
+  <!-- くくのへや（いままでの九九あそび） -->
+  <section class="screen" id="room">
+    <div class="top">
+      <button class="back" data-go="home">←</button>
       <div style="flex:1"></div>
       <div class="starbox" id="homeStars">⭐ 0</div>
     </div>
-    <div class="title"><h1 id="logo">そらの くくランド</h1><p>どの だんで あそぶ？</p></div>
+    <div class="title"><h1 id="logo">くくの へや</h1><p>どの だんで あそぶ？</p></div>
     <div class="dangrid" id="dangrid"></div>
     <div class="homebar">
       <button class="big" id="toSong">🎶 くくのうた</button>
@@ -185,7 +209,7 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
   <!-- だんメニュー -->
   <section class="screen" id="danMenu">
     <div class="top">
-      <button class="back" data-go="home">←</button>
+      <button class="back" data-go="room">←</button>
       <h2 id="danTitle">2のだん</h2>
       <div class="starbox" id="menuStars">⭐ 0</div>
     </div>
@@ -254,7 +278,7 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
   <!-- くくのうた（1〜9のだん ぜんぶ） -->
   <section class="screen" id="song">
     <div class="top">
-      <button class="back" data-go="home">←</button>
+      <button class="back" data-go="room">←</button>
       <h2>🎶 くくのうた</h2>
       <div class="starbox stars">⭐ 0</div>
     </div>
@@ -272,7 +296,7 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
   <!-- なかま図鑑 -->
   <section class="screen" id="zukanScr">
     <div class="top">
-      <button class="back" data-go="home">←</button>
+      <button class="back" data-go="room">←</button>
       <h2>なかま</h2>
       <div class="starbox stars">⭐ 0</div>
     </div>
@@ -281,6 +305,7 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
   </section>
 </div>
 
+<div id="lvup"><div class="lvbox"><div class="burst"></div><div class="icon"></div><div class="big1"></div><div class="big2"></div><div class="sub"></div><button class="big" id="lvOk">やったー！</button></div></div>
 <div id="toast"></div>
 <div class="modal" id="modal"><div class="card"><div class="face"></div><h3></h3><p></p><button class="big" style="margin:0 auto;background:var(--orange);color:#fff" id="modalOk">やったー！</button></div></div>
 
@@ -356,7 +381,7 @@ function play(file, text, v = voice(), rate = 1){
     let fell = false; const fallback = () => { if (fell || done) return; fell = true; audioOK = false; speakTTS(text, v, rate).then(fin); };
     AU.onended = fin;
     AU.onerror = fallback;
-    AU.src = `audio/${file}_${v}.mp3`;
+    AU.src = file.startsWith("z/") ? `audio/${file}.mp3` : `audio/${file}_${v}.mp3`;
     AU.playbackRate = rate; AU.preservesPitch = true;
     const p = AU.play(); if (p) p.catch(e => { if (e && e.name === "AbortError") return; fallback(); });
     setTimeout(fin, 8000);
@@ -477,7 +502,8 @@ function go(id){
   stopAll();
   $$(".screen").forEach(s => s.classList.toggle("on", s.id === id));
   refreshStars();
-  if (id === "home") renderHome();
+  if (id === "room") renderHome();
+  if (window.HOOKS && HOOKS[id]) HOOKS[id]();
   if (id === "danMenu") renderMenu();
   if (id === "zukanScr") renderZukan();
   if (id === "listen") startListen();
@@ -900,7 +926,7 @@ $("#startBtn").onclick = () => {
   $("#tapstart").remove();
   startBGM();
   go("home");
-  playPh("start");
+  play("z/start", "いくのだ");
 };
 /* ---- 開いた時・閉じる時の 音の始末 ----
    裏に回る／閉じる／ほかの画面に移る → すべての音を止めて 音のエンジンも止める
@@ -942,5 +968,6 @@ $("#resumeBtn").onclick = () => {
 
 renderHome(); refreshStars(); renderBgmBtn();
 </script>
+<script src="game.js"></script>
 </body>
 </html>
