@@ -57,7 +57,7 @@ function preloadZ(){
     while (i < ZIDS.length) {
       const id = ZIDS[i++];
       try {
-        const ab = await (await fetch(`audio/z/${id}.mp3`)).arrayBuffer();
+        const ab = await (await fetch(`audio/z/${id}.mp3?v=${ZV}`)).arrayBuffer();
         const buf = await new Promise((ok, ng) => actx.decodeAudioData(ab, ok, ng));
         ZB.set(id, trimInfo(buf));
       } catch(e) {}

@@ -351,6 +351,7 @@ const stamp = (d,m) => (S.stamps[d] ||= {}, S.stamps[d][m]);
 
 /* ============ 音 ============ */
 const AU = new Audio(); AU.preload = "auto";
+const ZV = "2";   // ずんだもんの声の 版（声を 作りなおしたら 上げる → スマホに のこった 古い声を 使わない）
 let audioOK = true;        // mp3 が無いときは端末の読み上げに切りかえ
 let actx = null;
 const rnd = a => a[Math.floor(Math.random()*a.length)];
@@ -381,7 +382,7 @@ function play(file, text, v = voice(), rate = 1){
     let fell = false; const fallback = () => { if (fell || done) return; fell = true; audioOK = false; speakTTS(text, v, rate).then(fin); };
     AU.onended = fin;
     AU.onerror = fallback;
-    AU.src = file.startsWith("z/") ? `audio/${file}.mp3` : `audio/${file}_${v}.mp3`;
+    AU.src = file.startsWith("z/") ? `audio/${file}.mp3?v=${ZV}` : `audio/${file}_${v}.mp3`;
     AU.playbackRate = rate; AU.preservesPitch = true;
     const p = AU.play(); if (p) p.catch(e => { if (e && e.name === "AbortError") return; fallback(); });
     setTimeout(fin, 8000);
