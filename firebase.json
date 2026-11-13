@@ -2,10 +2,37 @@
   "hosting": {
     "site": "sora-kuku",
     "public": "public",
-    "ignore": ["**/.*"],
+    "ignore": [
+      "**/.*"
+    ],
     "headers": [
-      {"source": "**/*.mp3", "headers": [{"key": "Cache-Control", "value": "public, max-age=604800"}]},
-      {"source": "**/*.html", "headers": [{"key": "Cache-Control", "value": "no-cache"}]}
+      {
+        "source": "**/*.mp3",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=604800"
+          }
+        ]
+      },
+      {
+        "source": "**/*.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "**/*.@(js|css|webmanifest)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      }
     ]
   }
 }
