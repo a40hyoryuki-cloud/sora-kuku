@@ -171,7 +171,7 @@ async function qCount1(q, id){
         ev.stopPropagation();
         if (e.classList.contains("done") || !alive(id)) return;
         cnt++; e.classList.add("done"); e.insertAdjacentHTML("beforeend", `<i class="no">${cnt}</i>`);
-        sfx("pon"); z("n" + cnt);
+        z("n" + cnt);
         if (cnt === q.n) resolve();
       };
       pl.appendChild(e);
@@ -202,7 +202,7 @@ async function qMake(q, id){
       if (!alive(id)) return;
       if (c >= q.a) { sfx("ng"); pl.classList.add("shake"); setTimeout(() => pl.classList.remove("shake"), 400); z("ooi", "おおすぎるのだ"); return; }
       const s = pl.children[c]; s.className = "it"; s.textContent = it; c++;
-      sfx("pon"); z("n" + c);
+      z("n" + c);
       if (c === q.a) { pl.classList.add("full"); full++; if (full === q.b) resolve(); }
     };
     area.appendChild(pl);
@@ -232,7 +232,7 @@ async function qSkip(q, id){
       if (!alive(id) || pl.classList.contains("lit")) return;
       k++; pl.classList.remove("dim"); pl.classList.add("lit");
       pl.insertAdjacentHTML("beforeend", `<span class="tot">${q.a * k}</span>`);
-      sfx("pon"); z("n" + q.a * k);
+      z("n" + q.a * k);
       if (k === q.b) resolve();
     };
     area.appendChild(pl);
@@ -260,7 +260,7 @@ async function qArray(q, id){
     row.onclick = () => {
       if (!alive(id) || row.classList.contains("lit")) return;
       k++; row.classList.add("lit"); row.insertAdjacentHTML("beforeend", `<i class="tot">${q.a * k}</i>`);
-      sfx("pon"); z("n" + q.a * k);
+      z("n" + q.a * k);
       if (k === q.b) resolve();
     };
     arr.appendChild(row);

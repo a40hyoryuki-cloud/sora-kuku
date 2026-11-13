@@ -107,6 +107,9 @@ def main():
     if a == 0:
         print("total", len(lst))
     for key, text in lst[a:b]:
+        # 数・九九は カタカナで 入れる（ひらがなだと「はち」が「ワチ」になるなど 読みまちがいが出る）
+        if key[0] in "nca" and key[1:2].isdigit() or key.startswith(("kozu", "sara")):
+            text = "".join(chr(ord(c) + 0x60) if "ぁ" <= c <= "ゖ" else c for c in text)
         fn = os.path.join(out, key + ".wav")
         if os.path.exists(fn):
             continue
