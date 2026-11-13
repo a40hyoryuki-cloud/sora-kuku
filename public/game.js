@@ -26,12 +26,77 @@ const need = L => 3 + Math.floor((L - 1) / 3);               // つぎの レベ
 const unlockedItems = () => ITEMS.slice(0, Math.min(ITEMS.length, 3 + Math.floor((total() - 1) / 3)));
 const roomOpen = () => G.lv[5] > 0 || S.roomOpen;
 
-// 声
-const z = (id, text) => play("z/" + id, text || (id[0] === "n" ? yomi(+id.slice(1)) : id));
-async function sayEq(a, b, n, id){
-  for (const c of [["n" + a], ["kakeru", "かける"], ["n" + b], ["wa", "は"], ["n" + n]]) { await z(...c); if (!alive(id)) return; }
+// 声：ずんだもんの声は 先に ぜんぶ メモリに 読みこんで、タップしたら すぐ 鳴らす
+//   （1つずつ ダウンロードすると 待ちが 出るため。読みこみ前は ふつうの再生で 代わりに）
+const ZIDS = (() => {
+  const ids = ["st1","st2","st3","st4","st5","tapcount","zenbude","noseru","tobi","retsu","kurutto","kuku","kakeru","wa",
+    "ok1","ok2","ok3","ok4","ok5","ng","ooi","dekita","lvup","max","stamp","newstage","allmax","start","kukuopen","okaeri"];
+  for (let n = 1; n <= 81; n++) ids.push("n" + n);
+  for (let n = 1; n <= 9; n++) ids.push("kozu" + n, "sara" + n);
+  const prod = new Set();
+  for (let a = 1; a <= 9; a++) for (let b = 1; b <= 9; b++) { ids.push(`c${a}x${b}`); prod.add(a * b); }
+  prod.forEach(n => ids.push("a" + n));
+  return ids;
+})();
+const ZB = new Map();          // id → { buf, s, e }（前後の 無音を けずった 位置）
+let zLoading = null, zSrcs = [], zDuck = null;
+function trimInfo(buf){
+  const d = buf.getChannelData(0); let pk = 0;
+  for (let i = 0; i < d.length; i++) pk = Math.max(pk, Math.abs(d[i]));
+  const th = pk * .02; let a = 0, b = d.length - 1;
+  while (a < b && Math.abs(d[a]) < th) a++;
+  while (b > a && Math.abs(d[b]) < th) b--;
+  const sr = buf.sampleRate;
+  return { buf, s: Math.max(0, a / sr - .02), e: Math.min(buf.duration, b / sr + .04) };
 }
-const praise = () => z("ok" + (1 + Math.floor(Math.random() * 5)), "せいかい");
+function preloadZ(){
+  if (zLoading) return zLoading;
+  try { actx ||= new (window.AudioContext || window.webkitAudioContext)(); } catch(e) { return Promise.resolve(); }
+  let i = 0;
+  const worker = async () => {
+    while (i < ZIDS.length) {
+      const id = ZIDS[i++];
+      try {
+        const ab = await (await fetch(`audio/z/${id}.mp3`)).arrayBuffer();
+        const buf = await new Promise((ok, ng) => actx.decodeAudioData(ab, ok, ng));
+        ZB.set(id, trimInfo(buf));
+      } catch(e) {}
+    }
+  };
+  zLoading = Promise.all([1,2,3,4,5,6].map(worker));
+  return zLoading;
+}
+function stopZ(){
+  zSrcs.forEach(x => { try { x.onended = null; x.stop(); } catch(e) {} }); zSrcs = [];
+  if (zDuck !== null) { duck(false, zDuck); zDuck = null; }
+}
+// いくつかの 声を すきまなく つづけて 鳴らす（前の声は 止める）
+function zSeq(ids, gap = .05){
+  stopZ();
+  if (!actx || !ids.every(i => ZB.has(i))) {
+    // まだ 読みこめていない → ふつうの再生で じゅんばんに
+    return ids.reduce((pr, i) => pr.then(() => play("z/" + i, i[0] === "n" ? yomi(+i.slice(1)) : i)), Promise.resolve());
+  }
+  return new Promise(res => {
+    const my = zDuck = duck(true);
+    let t = actx.currentTime + .02, last = null;
+    for (const i of ids) {
+      const z0 = ZB.get(i), src = actx.createBufferSource();
+      src.buffer = z0.buf; src.connect(actx.destination);
+      src.start(t, z0.s, z0.e - z0.s); t += z0.e - z0.s + gap;
+      zSrcs.push(src); last = src;
+    }
+    const fin = () => { if (zDuck === my) { duck(false, my); zDuck = null; } res(); };
+    last.onended = fin;
+    setTimeout(fin, (t - actx.currentTime) * 1000 + 300);   // 念のため
+  });
+}
+const z = id => zSeq([id]);
+const sayEq = (a, b, n) => zSeq(["n" + a, "kakeru", "n" + b, "wa", "n" + n], .03);
+// 画面を 出たら 声も 止める
+const _stopAll = window.stopAll;
+window.stopAll = function(){ stopZ(); return _stopAll.apply(this, arguments); };
+const praise = () => z("ok" + (1 + Math.floor(Math.random() * 5)));
 
 /* ---------- ホーム ---------- */
 function renderGameHome(){
@@ -110,7 +175,8 @@ async function startGame(){
   const id = RUN;
   $("#gArea").innerHTML = `<div class="ghint" style="font-size:44px">${STAGES[GS].icon}</div>`;
   setEq("", `${STAGES[GS].name}`); $("#gAns").innerHTML = "";
-  await z(STAGES[GS].v, STAGES[GS].name); if (!alive(id)) return;
+  preloadZ();
+  z(STAGES[GS].v); await sleep(900); if (!alive(id)) return;
   loop(id);
 }
 async function loop(id){
@@ -121,7 +187,7 @@ async function loop(id){
     if (!ok || !alive(id)) return;
     await gain(id);
     if (!alive(id)) return;
-    await sleep(400);
+    await sleep(150);
   }
 }
 function item(){ return pickIn(unlockedItems()); }
@@ -150,10 +216,10 @@ function askAnswer(q, id, onPick){
 }
 async function reveal(q, id){
   setEq(`${q.a}こずつ が ${q.b}こぶん`, `${q.a} × ${q.b} = <span class="q">${q.n}</span>`);
-  if (GS === 5) { await z("c" + q.a + "x" + q.b); if (!alive(id)) return; await z("a" + q.n); }
-  else await sayEq(q.a, q.b, q.n, id);
+  if (GS === 5) await zSeq(["c" + q.a + "x" + q.b, "a" + q.n], .02);
+  else await sayEq(q.a, q.b, q.n);
   if (!alive(id)) return;
-  await praise();
+  praise(); await sleep(700);
 }
 
 // 1 かぞえて：ひとつずつ タッチして かぞえる
@@ -178,9 +244,9 @@ async function qCount1(q, id){
     }
     area.appendChild(pl);
   }
-  if (qCount <= 2) z("tapcount", "ひとつずつ タッチして かぞえるのだ");
+  if (qCount === 1) z("tapcount", "ひとつずつ タッチして かぞえるのだ");
   await allCounted; if (!alive(id)) return false;
-  await sleep(700); if (!alive(id)) return false;
+  await sleep(250); if (!alive(id)) return false;
   z("zenbude", "ぜんぶで いくつ");
   await askAnswer(q, id); if (!alive(id)) return false;
   await reveal(q, id);
@@ -207,12 +273,10 @@ async function qMake(q, id){
     };
     area.appendChild(pl);
   }
-  await z("sara" + q.b, `おさら ${q.b}まいに`); if (!alive(id)) return false;
-  await z("kozu" + q.a, `${q.a}こずつ`); if (!alive(id)) return false;
-  z("noseru", "のせるのだ");
+  zSeq(["sara" + q.b, "kozu" + q.a, "noseru"], .06);
   await done; if (!alive(id)) return false;
-  await sleep(500); await z("dekita", "できたのだ"); if (!alive(id)) return false;
-  z("zenbude", "ぜんぶで いくつ");
+  await sleep(250); if (!alive(id)) return false;
+  zSeq(["dekita", "zenbude"], .1);
   await askAnswer(q, id); if (!alive(id)) return false;
   await reveal(q, id);
   return alive(id);
@@ -237,9 +301,9 @@ async function qSkip(q, id){
     };
     area.appendChild(pl);
   }
-  if (qCount <= 2) z("tobi", "おさらを じゅんばんに タッチするのだ");
+  if (qCount === 1) z("tobi", "おさらを じゅんばんに タッチするのだ");
   await done; if (!alive(id)) return false;
-  await sleep(700); if (!alive(id)) return false;
+  await sleep(250); if (!alive(id)) return false;
   z("zenbude", "ぜんぶで いくつ");
   await askAnswer(q, id); if (!alive(id)) return false;
   await reveal(q, id);
@@ -266,9 +330,9 @@ async function qArray(q, id){
     arr.appendChild(row);
   }
   area.appendChild(arr);
-  if (qCount <= 2) z("retsu", "いちれつずつ タッチするのだ");
+  if (qCount === 1) z("retsu", "いちれつずつ タッチするのだ");
   await done; if (!alive(id)) return false;
-  await sleep(700); if (!alive(id)) return false;
+  await sleep(250); if (!alive(id)) return false;
   z("zenbude", "ぜんぶで いくつ");
   await askAnswer(q, id); if (!alive(id)) return false;
   await reveal(q, id); if (!alive(id)) return false;
@@ -293,8 +357,7 @@ async function qKuku(q, id){
   }
   const call = KUKU[q.a][q.b - 1][0];
   setEq(`${call} …？`, `${q.a} × ${q.b} = <span class="q">？</span>`);
-  if (qCount <= 2) { await z("kuku", "くくで こたえるのだ"); if (!alive(id)) return false; }
-  await z("c" + q.a + "x" + q.b, call); if (!alive(id)) return false;
+  await zSeq(qCount === 1 ? ["kuku", "c" + q.a + "x" + q.b] : ["c" + q.a + "x" + q.b], .25); if (!alive(id)) return false;
   await askAnswer(q, id, x => { if (x !== q.n) return; }); if (!alive(id)) return false;
   await reveal(q, id);
   return alive(id);
@@ -353,7 +416,7 @@ async function gain(id){
 
 /* ---------- 画面の フック ---------- */
 window.HOOKS = window.HOOKS || {};
-HOOKS.home = () => { $("#lvup").classList.remove("on"); renderGameHome(); };
+HOOKS.home = () => { $("#lvup").classList.remove("on"); renderGameHome(); if (started) preloadZ(); };
 HOOKS.game = startGame;
 renderGameHome();
 
@@ -366,5 +429,5 @@ renderGameHome();
   el.addEventListener("mousedown", st); el.addEventListener("mouseup", en); el.addEventListener("mouseleave", en);
 })();
 // テスト用（ブラウザから 状態を みる）
-window.__game = { G, total, need, makeQ, get GS(){ return GS; } };
+window.__game = { G, total, need, makeQ, get GS(){ return GS; } }; window.ZBX = () => ZB;
 })();
