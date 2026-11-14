@@ -168,10 +168,43 @@ function head(){
   $("#gXp").style.width = (L >= MAXLV ? 100 : 100 * G.xp[GS] / need(L)) + "%";
 }
 function setEq(c, f){ $("#gEq .c").textContent = c || " "; $("#gEq .f").innerHTML = f || "&nbsp;"; }
+// お皿・どうぶつの列を 画面の あいている所に ぴったり おさめる（問題や ボタンに かぶらない）
+function fitArea(){
+  const area = $("#gArea"); if (!area || !area.clientHeight) return;
+  const cs = getComputedStyle(area);
+  const W = area.clientWidth, H = area.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const pls = area.querySelectorAll(".plate");
+  if (pls.length) {
+    const n = pls.length, gap = parseFloat(cs.columnGap) || 10, head = 20;   // head：とびかぞえの 数字ラベルの ぶん
+    let best = 0;
+    for (let c = 1; c <= n; c++) {
+      const r = Math.ceil(n / c);
+      const sz = Math.min((W - (c - 1) * gap) / c, (H - (r - 1) * gap) / r - head);
+      best = Math.max(best, sz);
+    }
+    const ps = Math.max(40, Math.min(best * .93, 180));   // .93：光ったときに 少し 大きくなる ぶん
+    pls.forEach(p => p.style.setProperty("--ps", ps + "px"));
+    area.style.rowGap = (gap + head) + "px";
+  }
+  const arr = area.querySelector(".arr");
+  if (arr) {
+    arr.style.setProperty("--k", 1); arr.style.setProperty("--k2", 1);
+    const w = arr.offsetWidth + 56, h = arr.offsetHeight;          // 56：右の 数字ラベルの ぶん
+    arr.style.setProperty("--k", Math.min(1, W / w, H / h));
+    arr.style.setProperty("--k2", Math.min(1, W / h, H / arr.offsetWidth));
+  }
+}
+let fitObs = null;
+function watchFit(){
+  if (fitObs) return;
+  fitObs = new MutationObserver(() => requestAnimationFrame(fitArea));
+  fitObs.observe($("#gArea"), { childList: true });
+  window.addEventListener("resize", () => requestAnimationFrame(fitArea));
+}
 function plateClass(b, a){ return (b > 6 ? "xs" : b > 4 ? "sm" : "") + (a > 4 ? " many" : a <= 2 ? " few" : " mid"); }
 
 async function startGame(){
-  qCount = 0; head();
+  qCount = 0; head(); watchFit();
   const id = RUN;
   $("#gArea").innerHTML = `<div class="ghint" style="font-size:44px">${STAGES[GS].icon}</div>`;
   setEq("", `${STAGES[GS].name}`); $("#gAns").innerHTML = "";
