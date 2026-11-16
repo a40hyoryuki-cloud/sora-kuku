@@ -479,7 +479,7 @@ async function startBGM(){
     applyBGM(.6);
   } catch(e) {}
 }
-function bgmTarget(){ return !S.bgm ? 0 : speaking ? BGM_VOL * DUCK : BGM_VOL; }
+function bgmTarget(){ return !S.bgm || songOn ? 0 : speaking ? BGM_VOL * DUCK : BGM_VOL; }
 function applyBGM(tc){
   if (!bgmGain || !actx) return;
   bgmGain.gain.cancelScheduledValues(actx.currentTime);
@@ -740,23 +740,30 @@ async function startPick(){
   await celebrate(S.friends > f0 ? FRIENDS[S.friends-1] : null, fin);
 }
 
-/* ---- くくのうた：ずんだもんが 1〜9のだんを 歌う（BGM が伴奏） ----
-   音声 sing_<段>_Z.mp3 = 1小節の休み +「◯のだん」1小節 + 九九9小節（テンポ112・C-Am-F-G）
-   「◯のだん」が BGM の C の小節（4小節の区切り）に来るように 1小節手前から再生する */
-const BEAT = 60 / 112, BAR = BEAT * 4;
+/* ---- くくのうた：ずんだもんが 1〜9のだんを 歌う（段ごとに 曲調が ちがう） ----
+   audio/songs/song_<段>.mp3 = 伴奏＋歌 の 曲ファイル（前奏1小節 →「◯のだん」→ 九九9行 → 後奏）
+   audio/songs/songs.json    = 各曲の 時刻表（「◯のだん」と 各行の 開始秒）→ 光るマスを 合わせる
+   1 ポップ / 2 ラップ / 3 ワルツ / 4 マーチ / 5 ロック / 6 サンバ / 7 ゲーム / 8 こもりうた / 9 ダンス */
+const SONG_V = "1";   // 曲の 版（作りなおしたら 上げる）
+const SONG_NAMES = ["", "ポップ", "ラップ", "ワルツ", "マーチ", "ロック", "サンバ", "ゲーム", "こもりうた", "ダンス"];
+let songMetaP = null;
+function loadSongMeta(){
+  return songMetaP ||= fetch(`audio/songs/songs.json?v=${SONG_V}`).then(r => { if (!r.ok) throw 0; return r.json(); })
+    .catch(e => { songMetaP = null; throw e; });
+}
 const SONG_ORDER = [1,2,3,4,5,6,7,8,9];
 const BUF = new Map();
 let songJobs = [];                     // 予約した音とタイマー（止めるとき用）
 let songOn = false;
 function songStop(){
   songJobs.forEach(j => { try { j.stop ? j.stop() : clearTimeout(j); } catch(e) {} });
-  songJobs = []; songOn = false;
+  songJobs = []; if (songOn) { songOn = false; applyBGM(.6); }
   const b = $("#songGo"); if (b) { b.textContent = "▶ はじめから"; b.classList.remove("stop"); }
   hlClear();
 }
-function loadBuf(file){
+function loadBuf(file, ver){
   if (BUF.has(file)) return BUF.get(file);
-  const p = fetch(`audio/${file}.mp3`).then(r => { if (!r.ok) throw 0; return r.arrayBuffer(); })
+  const p = fetch(`audio/${file}.mp3${ver ? "?v=" + ver : ""}`).then(r => { if (!r.ok) throw 0; return r.arrayBuffer(); })
     .then(ab => new Promise((ok, ng) => actx.decodeAudioData(ab, ok, ng)));
   BUF.set(file, p); p.catch(() => BUF.delete(file));
   return p;
@@ -814,7 +821,7 @@ function renderSong(){
   const g = $("#songGrid");
   g.innerHTML = SONG_ORDER.map(d => `
     <div class="scard" data-dan="${d}">
-      <h4 style="background:${DAN_COLOR[d]}">${d}のだん <small>▶</small></h4>
+      <h4 style="background:${DAN_COLOR[d]}">${d}のだん <small>▶ ${SONG_NAMES[d]}</small></h4>
       <ol>${KUKU[d].map(([c,a],i) => `<li data-b="${i+1}"><span class="eqs">${d} × ${i+1} = ${d*(i+1)}</span><span class="yo">${c} ${a}</span></li>`).join("")}</ol>
     </div>`).join("");
   $$("#songGrid h4").forEach(h => h.onclick = () => startSong(+h.parentNode.dataset.dan));
@@ -824,71 +831,58 @@ $("#songGo").onclick = () => songOn ? (stopAll(), go("song")) : startSong(1);
 
 async function startSong(fromDan, fromLine = 1){
   stopAll(); const id = RUN;
-  songOn = true;
+  songOn = true; applyBGM(.15);                       // 曲に 伴奏が 入っているので BGM は 止める
   const btn = $("#songGo"); btn.textContent = "■ とめる"; btn.classList.add("stop");
   try { actx ||= new (window.AudioContext || window.webkitAudioContext)(); await actx.resume(); } catch(e) {}
   const out = actx.createGain(); out.gain.value = 1; out.connect(actx.destination);
-  // 4小節の区切り（= C の小節）の時刻
-  const phrase = t => bgmSrc ? bgmT0 + Math.ceil((t - bgmT0) / (BAR * 4)) * BAR * 4 : t;
   const at = (t, fn) => { const h = setTimeout(fn, Math.max(0, (t - actx.currentTime) * 1000)); songJobs.push(h); };
   const list = SONG_ORDER.slice(SONG_ORDER.indexOf(fromDan));
-  let head = null, firstHead = null;     // 「◯のだん」を歌う時刻
-  // 行の途中から歌うときは その行の コード（C-Am-F-G）に BGM を合わせる
-  const firstChord = fromLine > 1 ? fromLine % 4 : 0;
-  // すぐ歌いだせるように BGM を 1小節手前から かけなおす → 1小節の前奏のあと 歌いだし
-  try { await loadBuf(`sing_${list[0]}_Z`); } catch(e) {}
+  let meta = null;
+  try { meta = await loadSongMeta(); } catch(e) {}
   if (!alive(id)) return;
-  if (bgmSrc) {
-    const t0 = actx.currentTime + .1, ns = actx.createBufferSource();
-    ns.buffer = bgmSrc.buffer; ns.loop = true; ns.connect(bgmGain);
-    const ob = (firstChord + 7) % 8;
-    ns.start(t0, BAR * ob); try { bgmSrc.stop(t0); } catch(e) {}
-    bgmSrc = ns; bgmT0 = t0 - BAR * ob;
-    firstHead = t0 + BAR - (fromLine > 1 ? BAR * fromLine : 0);   // 「◯のだん」の時刻（行から始めるときは 計算上の時刻）
-  }
+  let next = null;                                    // つぎの 曲を はじめる 時刻
   for (const [k, d] of list.entries()) {
     if (!alive(id)) return;
     let buf = null;
-    try { buf = await loadBuf(`sing_${d}_Z`); } catch(e) {}
-    if (list[k+1]) loadBuf(`sing_${list[k+1]}_Z`).catch(() => {});   // つぎの段を さきに読みこむ
+    try { if (meta) buf = await loadBuf(`songs/song_${d}`, SONG_V); } catch(e) {}
+    if (list[k+1] && meta) loadBuf(`songs/song_${list[k+1]}`, SONG_V).catch(() => {});   // つぎの段を さきに読みこむ
     if (!alive(id)) return;
+    const line0 = k === 0 ? fromLine : 1;               // この段で 歌いはじめる行
     if (!buf) {
-      // 予備：歌が読めないときは ふつうの読みあげで
+      // 予備：曲が読めないときは ふつうの読みあげで
       hlDan(d);
       const v = voice();
       await playPh("dan" + d, v); if (!alive(id)) return;
-      for (let b = k === 0 ? fromLine : 1; b <= 9; b++) {
+      for (let b = line0; b <= 9; b++) {
         hlLine(d, b);
         await playFull(d, b, v); if (!alive(id)) return;
         await sleep(250);
       }
-      hlDanEnd(d);
-      head = null;
+      hlDanEnd(d); next = null;
     } else {
-      const line0 = k === 0 ? fromLine : 1;           // この段で 歌いはじめる行
-      if (head) head = phrase(head + BAR * 10);
-      else if (firstHead !== null) head = firstHead;
-      else head = phrase(actx.currentTime + BAR + .2 + (line0 > 1 ? BAR * line0 : 0)) - (line0 > 1 ? BAR * line0 : 0);
+      const m = meta[d];
+      // 行の とちゅうから：その行の 1小節まえ（前奏がわり）から 再生
+      const off = line0 > 1 ? Math.max(0, m.lines[line0 - 1] - m.bar) : 0;
+      const t0 = Math.max(next || 0, actx.currentTime + .12);
+      const T = t0 - off;                               // この曲の 0秒の 時刻
       const src = actx.createBufferSource(); src.buffer = buf; src.connect(out);
-      if (line0 > 1) {
-        const t1 = head + BAR * line0;               // その行の 小節の頭
-        src.start(t1, BAR * (1 + line0));            // 音声の その行の ところから
-        at(t1 - .05, () => { hlDan(d); for (let b = 1; b < line0; b++) $(`#songTable [data-r="${d}"][data-c="${b}"]`).classList.add("done"); });
-      } else {
-        src.start(head - BAR);
-        at(head, () => hlDan(d));
-      }
-      songJobs.push(src);
-      for (let b = line0; b <= 9; b++) at(head + BAR * b, () => hlLine(d, b));
-      // この段の さいごの行が おわるまで まつ
-      while (actx.currentTime < head + BAR * 10 - .2) { if (!alive(id)) return; await sleep(100); }
+      src.start(t0, off); songJobs.push(src);
+      at(Math.max(t0, T + m.head) - .05, () => {
+        hlDan(d); setCap(`${d}のだん`, `♪ ${m.name}`);
+        for (let b = 1; b < line0; b++) $(`#songTable [data-r="${d}"][data-c="${b}"]`).classList.add("done");
+      });
+      for (let b = line0; b <= 9; b++) at(T + m.lines[b - 1], () => hlLine(d, b));
+      next = T + m.end;                                 // 後奏の あと すぐ つぎの段
+      // この段の 後奏が はじまるまで まつ（そのあいだに つぎの曲を 読みこむ）
+      while (actx.currentTime < T + m.lines[8] + m.bar) { if (!alive(id)) return; await sleep(100); }
       hlDanEnd(d);
+      while (actx.currentTime < next - .6) { if (!alive(id)) return; await sleep(100); }
     }
     addStars(1);
   }
   if (!alive(id)) return;
-  await sleep(1500); if (!alive(id)) return;
-  songOn = false; btn.textContent = "▶ はじめから"; btn.classList.remove("stop");
+  await sleep(400); if (!alive(id)) return;
+  songOn = false; applyBGM(.6); btn.textContent = "▶ はじめから"; btn.classList.remove("stop");
   hlClear(); setCap("🎉", "ぜんぶ うたえたね！");
   await playPh("clear");
 }
