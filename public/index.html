@@ -520,7 +520,7 @@ function renderHome(){
   const g = $("#dangrid"); g.innerHTML = "";
   ORDER.forEach(d => {
     const b = document.createElement("button");
-    const open = S.unlocked.includes(d);
+    const open = true;   // 段は さいしょから ぜんぶ あそべる
     b.className = "dan" + (open ? "" : " lock");
     b.style.background = DAN_COLOR[d];
     const st = ["listen","say","pick"].map(m => stamp(d,m) ? "⭐" : "・").join("");
@@ -556,12 +556,7 @@ function addStars(n){
 function finishMode(mode){
   let first = false;
   if (!stamp(DAN, mode)) { S.stamps[DAN][mode] = 1; first = true; }
-  // 3つそろったら次のだんを開ける
-  let opened = null;
-  if (["listen","say","pick"].every(m => stamp(DAN,m))) {
-    const next = ORDER.find(d => !S.unlocked.includes(d));
-    if (next) { S.unlocked.push(next); opened = next; }
-  }
+  const opened = null;   // 段は さいしょから ぜんぶ ひらいている
   save();
   return { first, opened };
 }
@@ -898,18 +893,6 @@ function renderZukan(){
     ? `<div><span>${f[0]}</span>${f[1]}</div>` : `<div class="no"><span>${f[0]}</span>？？？</div>`).join("");
 }
 
-/* ---- おとなよう：タイトルを3びょう長おしで ぜんぶ開ける/もどす ---- */
-(() => {
-  let t = null; const logo = $("#logo");
-  const start = () => { t = setTimeout(() => {
-    const all = S.unlocked.length >= ORDER.length;
-    S.unlocked = all ? [2,5] : [...ORDER]; save(); renderHome();
-    toast(all ? "🔒 もとに もどしたよ" : "🔓 ぜんぶ あけたよ", 1400);
-  }, 3000); };
-  const end = () => clearTimeout(t);
-  logo.addEventListener("touchstart", start, {passive:true}); logo.addEventListener("touchend", end);
-  logo.addEventListener("mousedown", start); logo.addEventListener("mouseup", end); logo.addEventListener("mouseleave", end);
-})();
 
 /* ---- はじめる（iPhoneは タッチしてから でないと 音が出ない） ---- */
 $("#startBtn").onclick = () => {

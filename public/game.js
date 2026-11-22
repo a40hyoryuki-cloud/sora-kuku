@@ -24,7 +24,7 @@ const G = S.g;
 const total = () => G.lv.reduce((a, b) => a + b, 0);
 const need = L => 3 + Math.floor((L - 1) / 3);               // つぎの レベルまでの せいかい数
 const unlockedItems = () => ITEMS.slice(0, Math.min(ITEMS.length, 3 + Math.floor((total() - 1) / 3)));
-const roomOpen = () => G.lv[5] > 0 || S.roomOpen;
+const roomOpen = () => true;   // くくのへや（歌・九九あそび）は いつでも 入れる
 
 // 声：ずんだもんの声は 先に ぜんぶ メモリに 読みこんで、タップしたら すぐ 鳴らす
 //   （1つずつ ダウンロードすると 待ちが 出るため。読みこみ前は ふつうの再生で 代わりに）
@@ -119,7 +119,7 @@ function renderGameHome(){
   h += `</div><div class="gstamps"><h3>スタンプ</h3><div class="row">`;
   for (let s = 1; s <= 5; s++) h += `<div class="sp ${G.stamps.includes("s" + s) ? "got" : ""}">${G.stamps.includes("s" + s) ? STAGES[s].icon : ""}<small>${s}</small></div>`;
   for (const m of [10, 20, 30, 40, 50]) h += `<div class="sp ${G.stamps.includes("m" + m) ? "got" : ""}">${G.stamps.includes("m" + m) ? (m === 50 ? "👑" : "🏅") : ""}<small>Lv${m}</small></div>`;
-  h += `</div></div><button class="groom ${roomOpen() ? "" : "lock"}" id="gRoom">${roomOpen() ? "🎵 くくの へや" : "🔒 くくの へや（ステージ5で ひらくよ）"}</button>
+  h += `</div></div><button class="groom" id="gRoom">🎵 くくの へや（うた）</button>
     <div class="gcredit">こえ・うた：VOICEVOX:ずんだもん</div>`;
   $("#gHome").innerHTML = h;
   $$("#gHome .gstage").forEach(b => b.onclick = () => {
@@ -127,7 +127,7 @@ function renderGameHome(){
     if (!G.lv[s]) { sfx("ng"); b.classList.add("shake"); setTimeout(() => b.classList.remove("shake"), 400); return; }
     GS = s; go("game");
   });
-  $("#gRoom").onclick = () => roomOpen() ? go("room") : (sfx("ng"), toast("🔒", 700));
+  $("#gRoom").onclick = () => go("room");
 }
 
 /* ---------- 問題づくり ---------- */
@@ -431,7 +431,6 @@ async function gain(id){
     if (s < 5 && !G.lv[s + 1]) {
       G.lv[s + 1] = 1;
       shows.push([STAGES[s + 1].icon, false, "あたらしい ステージ", `${s + 1}. ${STAGES[s + 1].name}`, "", "newstage", "あたらしい ステージが ひらいたのだ"]);
-      if (s + 1 === 5) shows.push(["🎵", false, "くくの へや", "OPEN!", "くくの うたも あるよ", "kukuopen", "くくの へやが ひらいたのだ"]);
     }
   }
   for (const m of [10, 20, 30, 40, 50]) {
@@ -453,14 +452,6 @@ HOOKS.home = () => { $("#lvup").classList.remove("on"); renderGameHome(); if (st
 HOOKS.game = startGame;
 renderGameHome();
 
-// おとなよう：タイトルを3びょう長おし → くくのへや を あける/もどす
-(() => {
-  let t = null; const el = $("#gTitle");
-  const st = () => { t = setTimeout(() => { S.roomOpen = !S.roomOpen; save(); renderGameHome(); toast(S.roomOpen ? "🔓 くくのへや" : "🔒 もとに もどしたよ", 1400); }, 3000); };
-  const en = () => clearTimeout(t);
-  el.addEventListener("touchstart", st, { passive: true }); el.addEventListener("touchend", en);
-  el.addEventListener("mousedown", st); el.addEventListener("mouseup", en); el.addEventListener("mouseleave", en);
-})();
 // テスト用（ブラウザから 状態を みる）
 window.__game = { G, total, need, makeQ, get GS(){ return GS; } }; window.ZBX = () => ZB;
 })();
